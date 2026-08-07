@@ -70,6 +70,26 @@ npm install
 npx expo start
 ```
 
+### Rodando com Docker
+
+Se estiver usando o `compose.yaml`, o serviço já entra na pasta do app da Prática 01:
+
+```bash
+docker compose run --rm --service-ports react-native npm run start:lan
+```
+
+Para abrir no celular pelo Expo Go, o computador e o celular precisam estar na mesma rede Wi-Fi. Se o QR Code mostrar `localhost`, defina o IP do computador antes de subir:
+
+```bash
+REACT_NATIVE_PACKAGER_HOSTNAME=SEU_IP_NA_REDE docker compose run --rm --service-ports react-native npm run start:lan
+```
+
+Se ainda não conectar, use o túnel:
+
+```bash
+docker compose run --rm --service-ports react-native npm run start:tunnel
+```
+
 5. **Desenvolva e Teste:** Escreva o código solicitado na prática e teste no seu celular usando o Expo Go.
 6. **Salve e Envie (Commit & Push):**
 
