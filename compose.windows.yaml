@@ -1,0 +1,32 @@
+services:
+  react-native:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    working_dir: /workspace/praticas/pratica01/app
+    command: >-
+      bash -lc "npm install && npx expo start --tunnel --clear"
+    volumes:
+      - .:/workspace
+      - pratica01_node_modules:/workspace/praticas/pratica01/app/node_modules
+      - pratica01_expo_cache:/workspace/praticas/pratica01/app/.expo
+      - npm_cache:/home/node/.npm
+    environment:
+      EXPO_DEVTOOLS_LISTEN_ADDRESS: 0.0.0.0
+      EXPO_NO_TELEMETRY: "1"
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "8081:8081"
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+    stdin_open: true
+    tty: true
+    init: true
+
+volumes:
+  pratica01_node_modules:
+  pratica01_expo_cache:
+  npm_cache:
