@@ -90,6 +90,45 @@ Se ainda não conectar, use o túnel:
 docker compose run --rm --service-ports react-native npm run start:tunnel
 ```
 
+### Windows (laboratório, sem Node.js instalado)
+
+Este modo requer apenas que o **Docker Desktop com contêineres Linux/WSL 2 já
+esteja instalado e liberado pela equipe de TI**. Node.js, npm, Expo CLI e ngrok
+rodam dentro do contêiner. No celular, instale o Expo Go pela loja de
+aplicativos.
+
+No PowerShell, entre na raiz deste repositório (onde está o arquivo
+`compose.windows.yaml`) e execute:
+
+```powershell
+docker compose -f compose.windows.yaml up --build
+```
+
+Na primeira execução, aguarde a instalação das dependências e a mensagem
+`Tunnel ready`. Depois, abra o Expo Go no celular e leia o QR Code exibido no
+terminal. O celular e o computador precisam ter acesso à internet, mas não
+precisam estar na mesma rede Wi-Fi quando o túnel está ativo.
+
+As alterações salvas em `praticas/pratica01/app` são detectadas pelo Expo e
+atualizadas no celular. Para encerrar, pressione `Ctrl+C`. Para iniciar de novo:
+
+```powershell
+docker compose -f compose.windows.yaml up
+```
+
+Para recriar somente os caches e dependências do ambiente, sem apagar o código:
+
+```powershell
+docker compose -f compose.windows.yaml down --volumes
+docker compose -f compose.windows.yaml up --build
+```
+
+> **Limitação das máquinas bloqueadas:** o Compose elimina a necessidade de
+> instalar as ferramentas JavaScript, mas não consegue contornar políticas da
+> instituição. Docker Desktop, WSL 2, virtualização e acesso ao serviço de túnel
+> precisam estar previamente autorizados pela equipe de TI. Para essas práticas
+> com Expo Go em celular físico, Android Studio não é necessário.
+
 5. **Desenvolva e Teste:** Escreva o código solicitado na prática e teste no seu celular usando o Expo Go.
 6. **Salve e Envie (Commit & Push):**
 

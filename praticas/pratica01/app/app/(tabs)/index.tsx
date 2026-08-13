@@ -18,7 +18,7 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Olá Mundo!</ThemedText>
+        <ThemedText type="title">Olá Geraldo!</ThemedText>
         <HelloWave />
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
@@ -50,19 +50,24 @@ export default function HomeScreen() {
         </Link>
 
         <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
+          {`Toque na aba Explorar para saber mais sobre o que está incluído neste aplicativo inicial.`}
         </ThemedText>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Passo 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
+<ThemedView style={styles.stepContainer}>
+    <ThemedText type="subtitle">Passo 3: Recomece do zero</ThemedText>
+
+    <ThemedText>
+      Quando estiver pronto, execute{' '}
+      <ThemedText type="defaultSemiBold">
+        npm run reset-project
+      </ThemedText>{' '}
+      para começar do zero com um novo diretório{' '}
+      <ThemedText type="defaultSemiBold">app</ThemedText>. Isso moverá o diretório{' '}
+      <ThemedText type="defaultSemiBold">app</ThemedText> atual para{' '}
+      <ThemedText type="defaultSemiBold">app-example</ThemedText>.
+    </ThemedText>
+  </ThemedView>
+
     </ParallaxScrollView>
   );
 }
