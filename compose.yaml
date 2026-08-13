@@ -1,0 +1,18 @@
+services:
+  react-native:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace/praticas/pratica01/app
+    volumes:
+      - .:/workspace
+    environment:
+      EXPO_DEVTOOLS_LISTEN_ADDRESS: 0.0.0.0
+      REACT_NATIVE_PACKAGER_HOSTNAME: ${REACT_NATIVE_PACKAGER_HOSTNAME:-}
+    ports:
+      - "8081:8081"
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+    stdin_open: true
+    tty: true
