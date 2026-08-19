@@ -28,7 +28,7 @@ export default function App() {
             Fazer compras de supermercado
           </Text> 
           <TouchableOpacity style={styles.addButton}>
-            <MaterialIcons name="delete" size={26} color={colors.gray[100]}/>
+            <MaterialIcons name="delete-outline" size={26} color={colors.gray[100]}/>
           </TouchableOpacity>
         </View>
       </View>
@@ -39,7 +39,7 @@ export default function App() {
             Estudar React Native
           </Text> 
           <TouchableOpacity style={styles.addButton}>
-            <MaterialIcons name="delete" size={26} color={colors.gray[100]}/>
+            <MaterialIcons name="delete-outline" size={26} color={colors.gray[100]}/>
           </TouchableOpacity>
         </View>
       </View>
@@ -50,7 +50,7 @@ export default function App() {
             Estudar Python
           </Text> 
           <TouchableOpacity style={styles.addButton}>
-            <MaterialIcons name="delete" size={26} color={colors.gray[100]}/>
+            <MaterialIcons name="delete-outline" size={26} color={colors.gray[100]}/>
           </TouchableOpacity>
         </View>
       </View>
@@ -61,7 +61,7 @@ export default function App() {
             Fazer atividades físicas
           </Text> 
           <TouchableOpacity style={styles.addButton}>
-            <MaterialIcons name="delete" size={26} color={colors.gray[100]}/>
+            <MaterialIcons name="delete-outline" size={26} color={colors.gray[100]}/>
           </TouchableOpacity>
         </View>
       </View>
@@ -77,8 +77,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   header: {
-    paddingTop: 32,
-    paddingBottom: 30,
+    paddingTop: 40,
+    paddingBottom: 15,
     width: "100%",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -89,9 +89,16 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "500"
   },
+    inputTask: {
+    width: "100%",
+    marginTop: 10,
+    padding: 12,
+    flexDirection: "row",
+    gap: 6
+  },
   inputField: {
+      flex: 1,
       height: 52,
-      width:"100%",
       backgroundColor: colors.gray[100],
       borderRadius: 8,
       borderWidth: 1,
@@ -99,12 +106,6 @@ const styles = StyleSheet.create({
       paddingLeft: 8,
       color: colors.gray[800],
       fontSize: 18
-  },
-  inputTask: {
-    width: "100%",
-    padding: 12,
-    flexDirection: "row",
-    gap: 6
   },
   addButton: {
     height: 52,
@@ -127,6 +128,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[600],
     borderRadius: 8,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.gray[200]
   },
   tasks: {
     flex: 1,
