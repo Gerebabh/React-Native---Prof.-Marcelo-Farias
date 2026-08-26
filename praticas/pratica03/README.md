@@ -30,6 +30,98 @@ npx expo start
 
 ---
 
+## 🤖 Executando no Android Emulator (Fedora)
+
+O Android Emulator roda diretamente no Fedora. Para que o Expo consiga localizar
+o emulador, execute também o Metro Bundler no Fedora, **fora do container
+Docker**.
+
+### 1. Configure o Android SDK no terminal
+
+O Linux diferencia letras maiúsculas de minúsculas. Nesta instalação, o caminho
+correto é `Android/Sdk`:
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+```
+
+Confirme que o `adb` e a aceleração KVM estão disponíveis:
+
+```bash
+adb devices
+emulator -accel-check
+```
+
+Para tornar a configuração permanente, adicione as variáveis ao Bash uma única
+vez:
+
+```bash
+echo 'export ANDROID_HOME="$HOME/Android/Sdk"' >> ~/.bashrc
+echo 'export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 2. Inicie o aparelho virtual
+
+Nesta máquina, o Android Studio foi instalado via Flatpak. Para abri-lo pelo
+terminal:
+
+```bash
+flatpak run com.google.AndroidStudio
+```
+
+O AVD usado nesta prática é um **Pixel 4, API 35, x86_64**, com 2 GB de RAM. Ele
+pode ser aberto pelo Device Manager do Android Studio. Se o emulador encerrar
+com `Falha de segmentação` no Fedora com uma GPU Intel antiga, inicie-o pelo
+terminal com Vulkan desabilitado:
+
+```bash
+LIBGL_ALWAYS_SOFTWARE=1 emulator @Pixel_4 \
+  -no-snapshot \
+  -noaudio \
+  -gpu host \
+  -feature -Vulkan
+```
+
+Mantenha esse terminal aberto enquanto estiver usando o emulador. Em outro
+terminal, verifique a conexão:
+
+```bash
+adb devices
+```
+
+Continue somente quando aparecer `device`:
+
+```text
+List of devices attached
+emulator-5554    device
+```
+
+Se aparecer `offline`, aguarde o Android terminar de iniciar. Se aparecer
+`unauthorized`, desbloqueie o aparelho virtual e aceite a autorização de
+depuração USB exibida na tela.
+
+### 3. Inicie o projeto no Fedora
+
+Abra outro terminal e execute:
+
+```bash
+cd ~/dev_local/IESB/React-Native---Prof.-Marcelo-Farias/praticas/pratica03/app
+unset EXPO_OFFLINE
+npm install
+npx expo start
+```
+
+Quando o Metro Bundler estiver pronto, pressione `a` para instalar ou abrir o
+Expo Go no emulador. Não é necessário entrar na Play Store.
+
+> Se o Expo informar `spawn adb ENOENT`, confira `echo "$ANDROID_HOME"` e
+> `which adb`. Se ele procurar o SDK em `/home/usuario/Android/sdk`, corrija o
+> caminho para `/home/usuario/Android/Sdk`.
+
+---
+
 ## 🛠️ O que construir na tela
 
 Limpe o conteúdo padrão do arquivo principal e monte:
