@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    working_dir: /workspace/praticas/pratica01/app
+    working_dir: /workspace/praticas/
     volumes:
       - .:/workspace
     environment:
