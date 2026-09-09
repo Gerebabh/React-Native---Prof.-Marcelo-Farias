@@ -92,9 +92,3 @@ Capturas reais da versão web, em uma janela com largura de celular. A última c
 - Remoção de uma meta sem alterar as demais, mantida após recarregar.
 - Três metas preservadas após fechar e reabrir a aba, incluindo a conclusão.
 - Lista com 17 metas e rolagem até o último item.
-
-O teste no Expo Go em um celular físico ainda precisa ser feito. Nesse teste, conferir o Alert, o efeito ripple e a persistência ao encerrar o app pelos aplicativos recentes. A exportação Android verifica a compilação, mas não substitui esse teste.
-
-## Pull Request
-
-Branch: `feature/pratica05`. O link do PR deve ser acrescentado depois do push e da abertura do Pull Request.
