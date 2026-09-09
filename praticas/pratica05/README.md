@@ -74,15 +74,15 @@ Capturas reais da versão web, em uma janela com largura de celular. A última c
 
 ### Lista vazia
 
-![Lista vazia](./MetasSemestre/screenshots/lista-vazia.png)
+![Lista vazia](./MetasSemestre/screenshots/lista-vazia.jpeg)
 
 ### Lista com itens
 
-![Lista com três metas, sendo uma concluída](./MetasSemestre/screenshots/com-itens.png)
+![Lista com três metas, sendo uma concluída](./MetasSemestre/screenshots/com-itens.jpeg)
 
 ### Após reabrir
 
-![Metas preservadas após fechar e reabrir a versão web](./MetasSemestre/screenshots/apos-reabrir.png)
+![Metas preservadas após fechar e reabrir a versão web](./MetasSemestre/screenshots/apos-reabrir.jpeg)
 
 ### Verificações realizadas
 
