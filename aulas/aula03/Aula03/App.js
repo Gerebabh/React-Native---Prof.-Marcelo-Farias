@@ -1,77 +1,37 @@
 import { Button, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
+import MetasList from './components/MetasList';
+import MetaInput from './components/MetaInput';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from './styles/colors';
 import { rotulo_input_meta, rotulo_lista_metas, rotulo_btn_cadastro_meta } from './mensagens';
-import Metaslist from './components/Metaslist';
 
 
 export default function App() {
-  const [inputMetaText, setInputMetaText] = useState('');
-  const [metas, setMetas] = useState([
-  'Estudar React Native',
-  'Aprender JavaScript',
-  'Praticar componentes',
-  'Aprender Flexbox',
-  'Estudar StyleSheet',
-  'Aprender useState',
-  'Praticar eventos',
-  'Estudar TextInput',
-  'Estudar Button',
-  'Aprender listas',
-  'Praticar map',
-  'Aprender FlatList',
-  'Estudar navegação',
-  'Criar uma tela de login',
-  'Criar uma tela de cadastro',
-  'Aprender consumo de API',
-  'Estudar JSON',
-  'Praticar requisições HTTP',
-  'Aprender AsyncStorage',
-  'Estudar autenticação',
-  'Criar um aplicativo',
-  'Publicar um projeto',
-  'Aprender Git',
-  'Praticar GitHub',
-  'Estudar TypeScript',
-  'Aprender Expo',
-  'Estudar Android Studio',
-  'Testar no celular',
-  'Criar um projeto completo',
-  'Concluir o curso de React Native'
-  ]);
 
-  function metaInputHandler(inputText) {
-    setInputMetaText (inputText)
+  const [metas, setMetas] = useState([]);
+
+  function adicionaMetaHandler(inputMeta) {
+    const novaMeta = { id: Math.random().toString(), texto: inputMeta}
+    setMetas ([...metas, novaMeta])
   }
 
-  function adicionaMetaHandler() {
-    setMetas ([...metas, inputMetaText])
+  function deletarMetaHandler(id) {
+    console.log(id)
+    const novasMetas = metas.filter(meta => meta.id !== id)
+    setMetas (novasMetas)
   }
 
   return (
       <View style={styles.mainContainer}>
-        <View style={{
-          flex: 1,
-          flexDirection: 'row',
-          justifyContent: 'space-between'}}>
-          <View style={{width: '65%'}}>
-            <TextInput 
-              style={styles.inputText}
-              placeholder={rotulo_input_meta}
-              onChangeText={metaInputHandler}
-            />
-          </View>
-          <View style={{width: "30%"}}>
-            <Button title={rotulo_btn_cadastro_meta} 
-              onPress={adicionaMetaHandler} />
-          </View>
-        </View>
+          <MetaInput onAddMeta={adicionaMetaHandler} />
+
         <View  style={styles.metaContainer}>
-          <Metaslist array={metas}/>
+          <MetasList array={metas}
+          onDeleteItem={deletarMetaHandler}/>
         </View>
       </View>
-
   );
 }
 
