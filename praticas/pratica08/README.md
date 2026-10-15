@@ -1,4 +1,4 @@
-# Prática 07 - Gerenciador de Despesas
+# Prática 08 - Gerenciador de Despesas
 
 Aplicativo simples em React Native com Expo, seguindo a organização das aulas 07 e 08.
 Usa as versões do projeto local aula07.
@@ -42,4 +42,4 @@ Não há banco de dados, busca ou tema escuro nesta prática.
 5. Cadastre uma data futura e outra de oito dias atrás: ambas aparecem em Todas, mas não em Recentes.
 6. Exclua uma despesa e confira o total. Cancele uma edição e confira que nada foi alterado.
 
-Os arquivos estão diretamente em praticas/pratica07. A pasta Material foi preservada. Nenhuma operação de Git foi realizada.
+Os arquivos estão em praticas/pratica08. O material de consulta foi removido da entrega.
