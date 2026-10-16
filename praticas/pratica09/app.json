@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Gerenciador de Despesas 2.0",
+    "slug": "pratica09",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic"
+  }
+}
