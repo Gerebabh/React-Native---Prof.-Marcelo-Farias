@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Gerenciador de Despesas",
+    "slug": "pratica08",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}
