@@ -4,7 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 export default function App() {
   return (
     <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
+      <Text style={styles.titulo}>Pool Day</Text>
+      <Text style={styles.subtitulo}>Tratamento de piscinas</Text>
       <StatusBar style="auto" />
     </View>
   );
@@ -16,5 +17,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
+  },
+  titulo: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  subtitulo: {
+    color: '#666',
+    fontSize: 16,
+    marginTop: 8,
   },
 });
