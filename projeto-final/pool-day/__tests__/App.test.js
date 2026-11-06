@@ -2,81 +2,111 @@ import { Alert } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import App from '../App';
 
-describe('cadastro da residência', () => {
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    SafeAreaProvider: ({ children }) => React.createElement(View, null, children),
+    SafeAreaView: ({ children, ...props }) => React.createElement(View, props, children),
+  };
+});
+
+jest.mock('@react-native-community/datetimepicker', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return function SeletorData({ onValueChange }) {
+    return React.createElement(Text, { onPress: () => onValueChange({ type: 'set' }, new Date(2026, 10, 10)) }, 'Selecionar no calendário');
+  };
+});
+
+jest.mock('@react-native-picker/picker', () => {
+  const React = require('react');
+  const { Text, View } = require('react-native');
+  function Picker({ children, onValueChange }) {
+    const items = React.Children.toArray(children).filter(React.isValidElement);
+    return React.createElement(View, null, items.map((item) => React.cloneElement(item, { onValueChange })));
+  }
+  Picker.Item = ({ label, value, onValueChange }) => React.createElement(Text, { onPress: () => onValueChange(value) }, label);
+  return { Picker };
+});
+
+describe('cadastro de cliente e visitas', () => {
   let alerta;
 
-  beforeEach(() => {
-    alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  });
+  beforeEach(() => { alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
+  afterEach(() => { alerta.mockRestore(); });
 
-  afterEach(() => {
-    alerta.mockRestore();
-  });
+  async function preencherLocal(tela, { cliente = 'Casa da família', endereco = 'Rua das Flores, 10', piscina = true, litragem = '13000' } = {}) {
+    const { getByPlaceholderText, getByText, getByRole } = tela;
+    await fireEvent.changeText(getByPlaceholderText('Cliente'), cliente);
+    await fireEvent.changeText(getByPlaceholderText('Endereço'), endereco);
+    if (piscina) await fireEvent.press(getByText('Fibra'));
+    await fireEvent.changeText(getByPlaceholderText('Litragem em litros (ex.: 13000)'), litragem);
+    await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
+  }
 
   test('mostra o nome do aplicativo', async () => {
     const { getByText } = await render(<App />);
-
     expect(getByText('Pool Day')).toBeTruthy();
   });
 
-  test.each([
-    ['Nome da residência', 'Casa'],
-    ['Endereço', 'Rua das Flores, 10'],
-    ['Tipo de piscina', 'Fibra'],
-    ['Litragem em litros (ex.: 13000)', '13000'],
-  ])('exige o campo %s', async (campoVazio) => {
-    const { getByPlaceholderText, getByRole } = await render(<App />);
-    const campos = [
-      ['Nome da residência', 'Casa'],
-      ['Endereço', 'Rua das Flores, 10'],
-      ['Tipo de piscina', 'Fibra'],
-      ['Litragem em litros (ex.: 13000)', '13000'],
-    ];
-
-    for (const [placeholder, valor] of campos) {
-      if (placeholder !== campoVazio) {
-        await fireEvent.changeText(getByPlaceholderText(placeholder), valor);
-      }
-    }
-
-    await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
-
-    expect(alerta).toHaveBeenCalledWith(
-      'Cadastro incompleto',
-      'Preencha todos os campos da residência e da piscina.'
-    );
-  });
-
-  test.each(['0', '-500', 'abc', '13.5'])(
-    'não aceita a litragem inválida "%s"',
-    async (litragem) => {
-      const { getByPlaceholderText, getByRole } = await render(<App />);
-
-      await fireEvent.changeText(getByPlaceholderText('Nome da residência'), 'Casa');
-      await fireEvent.changeText(getByPlaceholderText('Endereço'), 'Rua das Flores, 10');
-      await fireEvent.changeText(getByPlaceholderText('Tipo de piscina'), 'Fibra');
-      await fireEvent.changeText(getByPlaceholderText('Litragem em litros (ex.: 13000)'), litragem);
-      await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
-
-      expect(alerta).toHaveBeenCalledWith(
-        'Litragem inválida',
-        'Informe uma litragem inteira maior que zero.'
-      );
+  test.each(['Cliente', 'Endereço', 'Tipo de piscina', 'Litragem em litros (ex.: 13000)'])(
+    'exige o campo %s', async (campo) => {
+      const tela = await render(<App />);
+      await preencherLocal(tela, {
+        cliente: campo === 'Cliente' ? '' : 'Casa da família',
+        endereco: campo === 'Endereço' ? '' : 'Rua das Flores, 10',
+        piscina: campo !== 'Tipo de piscina',
+        litragem: campo.includes('Litragem') ? '' : '13000',
+      });
+      expect(alerta).toHaveBeenCalledWith('Cadastro incompleto', 'Preencha todos os campos da residência e da piscina.');
     }
   );
 
-  test('salva e mostra os dados válidos da residência e da piscina', async () => {
-    const { getByPlaceholderText, getByRole, getByText } = await render(<App />);
+  test.each(['0', '-500', 'abc', '13.5'])('não aceita litragem inválida "%s"', async (litragem) => {
+    const tela = await render(<App />);
+    await preencherLocal(tela, { litragem });
+    expect(alerta).toHaveBeenCalledWith('Litragem inválida', 'Informe uma litragem inteira maior que zero.');
+  });
 
-    await fireEvent.changeText(getByPlaceholderText('Nome da residência'), 'Casa da família');
-    await fireEvent.changeText(getByPlaceholderText('Endereço'), 'Rua das Flores, 10');
-    await fireEvent.changeText(getByPlaceholderText('Tipo de piscina'), 'Fibra');
-    await fireEvent.changeText(getByPlaceholderText('Litragem em litros (ex.: 13000)'), '13000');
-    await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
+  test('salva cliente, endereço e tipo de piscina', async () => {
+    const tela = await render(<App />);
+    await preencherLocal(tela);
+    expect(tela.getByText('Residência cadastrada')).toBeTruthy();
+    expect(tela.getByText('Casa da família')).toBeTruthy();
+    expect(tela.getByText('Piscina de Fibra • 13000 L')).toBeTruthy();
+  });
 
-    expect(getByText('Residência cadastrada')).toBeTruthy();
-    expect(getByText('Casa da família')).toBeTruthy();
-    expect(getByText('Endereço: Rua das Flores, 10')).toBeTruthy();
-    expect(getByText('Piscina de Fibra • 13000 L')).toBeTruthy();
+  test('cadastra visita com data, local e serviço selecionados', async () => {
+    const tela = await render(<App />);
+    await preencherLocal(tela);
+    await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar no calendário'));
+    await fireEvent.press(tela.getByText('Aplicar produtos'));
+    await fireEvent.changeText(tela.getByPlaceholderText('Orientação de produtos'), 'Aplicar cloro após a medição.');
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+
+    expect(tela.getByText('10/11/2026')).toBeTruthy();
+    expect(tela.getAllByText('Casa da família — Rua das Flores, 10')).toHaveLength(2);
+    expect(tela.getAllByText('Aplicar produtos')).toHaveLength(2);
+    expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy();
+  });
+
+  test('não permite adicionar visita sem data, local e serviço', async () => {
+    const tela = await render(<App />);
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+    expect(alerta).toHaveBeenCalledWith('Cadastro incompleto', 'Preencha a data, o local e o tipo de serviço da visita.');
+  });
+
+  test('exige orientação para serviço de aplicar produtos', async () => {
+    const tela = await render(<App />);
+    await preencherLocal(tela);
+    await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar no calendário'));
+    await fireEvent.press(tela.getByText('Aplicar produtos'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+    expect(alerta).toHaveBeenCalledWith('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
   });
 });
