@@ -5,6 +5,7 @@ import VisitasLista from './components/VisitasLista';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import * as Location from 'expo-location';
 
 export default function App(props) {
   return (
@@ -99,6 +100,94 @@ function ConteudoApp({ visitasIniciais = [] }) {
     ));
   }
 
+  async function registrarChegada(id) {
+    try {
+      const servicosAtivos = await Location.hasServicesEnabledAsync();
+
+      if (!servicosAtivos) {
+        Alert.alert('Localização desativada', 'Ative o serviço de localização do aparelho e tente novamente.');
+        return;
+      }
+
+      const permissaoAtual = await Location.getForegroundPermissionsAsync();
+
+      if (permissaoAtual.status !== 'granted') {
+        Alert.alert(
+          'Acesso à localização',
+          'Para registrar a chegada, o Pool Day precisa usar o GPS do aparelho.',
+          [
+            { text: 'Agora não', style: 'cancel', onPress: () => {} },
+            { text: 'Continuar', onPress: () => solicitarPermissaoLocalizacao(id) },
+          ]
+        );
+        return;
+      }
+
+      await salvarHorarioChegada(id);
+    } catch (erro) {
+      Alert.alert('Localização indisponível', 'Não foi possível obter sua localização. Verifique o GPS e tente novamente.');
+    }
+  }
+
+  async function solicitarPermissaoLocalizacao(id) {
+    try {
+      const permissao = await Location.requestForegroundPermissionsAsync();
+
+      if (permissao.status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Permita o acesso à localização para registrar sua chegada.');
+        return;
+      }
+
+      await salvarHorarioChegada(id);
+    } catch (erro) {
+      Alert.alert('Localização indisponível', 'Não foi possível obter sua localização. Verifique o GPS e tente novamente.');
+    }
+  }
+
+  async function salvarHorarioChegada(id) {
+    try {
+      const localizacao = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const enderecoChegada = await obterEndereco(localizacao.coords);
+      const chegada = {
+        horarioChegada: new Date().toISOString(),
+        latitude: localizacao.coords.latitude,
+        longitude: localizacao.coords.longitude,
+        enderecoChegada: enderecoChegada || `${localizacao.coords.latitude.toFixed(2)}, ${localizacao.coords.longitude.toFixed(2)}`,
+      };
+
+      setVisitas((listaAtual) => listaAtual.map((visita) =>
+        visita.id === id ? { ...visita, ...chegada } : visita
+      ));
+    } catch (erro) {
+      Alert.alert('Localização indisponível', 'Não foi possível obter sua localização. Verifique o GPS e tente novamente.');
+    }
+  }
+
+  async function obterEndereco(coordenadas) {
+    try {
+      const enderecos = await Location.reverseGeocodeAsync({
+        latitude: coordenadas.latitude,
+        longitude: coordenadas.longitude,
+      });
+      const endereco = enderecos[0];
+
+      if (!endereco) return '';
+
+      const rua = [endereco.street, endereco.streetNumber].filter(Boolean).join(', ');
+      const cidade = [endereco.city || endereco.subregion, endereco.region].filter(Boolean).join(' - ');
+      return [rua, endereco.district, cidade].filter(Boolean).join(' - ');
+    } catch (erro) {
+      return '';
+    }
+  }
+
+  function registrarSaida(id) {
+    const horarioSaida = new Date().toISOString();
+    setVisitas((listaAtual) => listaAtual.map((visita) =>
+      visita.id === id ? { ...visita, horarioSaida } : visita
+    ));
+  }
+
   return (
     <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -144,7 +233,7 @@ function ConteudoApp({ visitasIniciais = [] }) {
         <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: '#c65326' }}>
           <Text style={styles.textoBotao}>Adicionar visita</Text>
         </Pressable>
-        <VisitasLista visitas={visitas} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
+        <VisitasLista visitas={visitas} onCheckIn={registrarChegada} onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
       </View>
     </ScrollView>
     </KeyboardAvoidingView>
