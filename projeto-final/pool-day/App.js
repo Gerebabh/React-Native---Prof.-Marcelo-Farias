@@ -57,6 +57,11 @@ function ConteudoApp({ visitasIniciais = [] }) {
       return;
     }
 
+    if (inicioDoDia(dataVisita) < inicioDoDia(new Date())) {
+      Alert.alert('Data inválida', 'A data da visita não pode ser anterior a hoje.');
+      return;
+    }
+
     if (servico === 'Aplicar produtos' && !orientacao.trim()) {
       Alert.alert('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
       return;
@@ -64,11 +69,34 @@ function ConteudoApp({ visitasIniciais = [] }) {
 
     setVisitas((listaAtual) => [
       ...listaAtual,
-      { id: Date.now().toString(), data: formatarData(dataVisita), local: `${residencia.cliente} — ${residencia.endereco}`, servico, orientacao: servico === 'Aplicar produtos' ? orientacao.trim() : '' },
+      { id: Date.now().toString(), data: formatarData(dataVisita), local: `${residencia.cliente} — ${residencia.endereco}`, servico, orientacao: servico === 'Aplicar produtos' ? orientacao.trim() : '', status: 'Pendente', justificativa: '' },
     ]);
     setDataVisita(null);
     setServico('');
     setOrientacao('');
+  }
+
+  function alterarStatusVisita(id, status) {
+    setVisitas((listaAtual) => listaAtual.map((visita) =>
+      visita.id === id ? { ...visita, status } : visita
+    ));
+  }
+
+  function confirmarConclusaoVisita(id) {
+    Alert.alert(
+      'Deseja concluir a visita?',
+      'A visita será movida para Visitas concluídas e não poderá ser alterada.',
+      [
+        { text: 'Não', style: 'cancel', onPress: () => {} },
+        { text: 'Sim', onPress: () => alterarStatusVisita(id, 'Executada') },
+      ]
+    );
+  }
+
+  function alterarJustificativaVisita(id, justificativa) {
+    setVisitas((listaAtual) => listaAtual.map((visita) =>
+      visita.id === id ? { ...visita, justificativa } : visita
+    ));
   }
 
   return (
@@ -109,14 +137,14 @@ function ConteudoApp({ visitasIniciais = [] }) {
         <Pressable accessibilityRole="button" accessibilityLabel="Selecionar data da visita" onPress={() => setMostrarCalendario(true)} style={styles.campoData}>
           <Text style={dataVisita ? styles.textoData : styles.placeholderData}>{dataVisita ? formatarData(dataVisita) : 'Data da visita'}</Text>
         </Pressable>
-        {mostrarCalendario && <DateTimePicker value={dataVisita || new Date()} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onValueChange={(_evento, dataSelecionada) => { setDataVisita(dataSelecionada); setMostrarCalendario(false); }} onDismiss={() => setMostrarCalendario(false)} />}
+        {mostrarCalendario && <DateTimePicker value={dataVisita || new Date()} minimumDate={inicioDoDia(new Date())} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onValueChange={(_evento, dataSelecionada) => { setDataVisita(dataSelecionada); setMostrarCalendario(false); }} onDismiss={() => setMostrarCalendario(false)} />}
         <Text style={styles.rotulo}>Tipo de serviço</Text>
         <View style={styles.seletor}><Picker selectedValue={servico} onValueChange={setServico}><Picker.Item label="Selecione o serviço" value="" /><Picker.Item label="Aplicar produtos" value="Aplicar produtos" /><Picker.Item label="Aspiração - Liberar o uso" value="Aspiração - Liberar o uso" /><Picker.Item label="Inspeção" value="Inspeção" /></Picker></View>
         {servico === 'Aplicar produtos' && <TextInput style={styles.campo} placeholder="Orientação de produtos" value={orientacao} onChangeText={setOrientacao} />}
         <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: '#c65326' }}>
           <Text style={styles.textoBotao}>Adicionar visita</Text>
         </Pressable>
-        <VisitasLista visitas={visitas} />
+        <VisitasLista visitas={visitas} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
       </View>
     </ScrollView>
     </KeyboardAvoidingView>
@@ -125,6 +153,12 @@ function ConteudoApp({ visitasIniciais = [] }) {
 
 function formatarData(data) {
   return `${String(data.getDate()).padStart(2, '0')}/${String(data.getMonth() + 1).padStart(2, '0')}/${data.getFullYear()}`;
+}
+
+function inicioDoDia(data) {
+  const dia = new Date(data);
+  dia.setHours(0, 0, 0, 0);
+  return dia;
 }
 
 const styles = StyleSheet.create({

@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import App from '../App';
 
 jest.mock('react-native-safe-area-context', () => {
@@ -13,9 +13,12 @@ jest.mock('react-native-safe-area-context', () => {
 
 jest.mock('@react-native-community/datetimepicker', () => {
   const React = require('react');
-  const { Text } = require('react-native');
+  const { Text, View } = require('react-native');
   return function SeletorData({ onValueChange }) {
-    return React.createElement(Text, { onPress: () => onValueChange({ type: 'set' }, new Date(2026, 10, 10)) }, 'Selecionar no calendário');
+    return React.createElement(View, null,
+      React.createElement(Text, { onPress: () => onValueChange({ type: 'set' }, new Date(2026, 10, 10)) }, 'Selecionar no calendário'),
+      React.createElement(Text, { onPress: () => { const ontem = new Date(); ontem.setDate(ontem.getDate() - 1); onValueChange({ type: 'set' }, ontem); } }, 'Selecionar data passada')
+    );
   };
 });
 
@@ -99,6 +102,19 @@ describe('cadastro de cliente e visitas', () => {
     expect(alerta).toHaveBeenCalledWith('Cadastro incompleto', 'Preencha a data, o local e o tipo de serviço da visita.');
   });
 
+  test('não permite agendar visita com data passada', async () => {
+    const tela = await render(<App />);
+    await preencherLocal(tela);
+    await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar data passada'));
+    await fireEvent.press(tela.getByText('Inspeção'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+
+    expect(alerta).toHaveBeenCalledWith('Data inválida', 'A data da visita não pode ser anterior a hoje.');
+    expect(tela.getByText('Nenhuma visita programada.')).toBeTruthy();
+  });
+
   test('exige orientação para serviço de aplicar produtos', async () => {
     const tela = await render(<App />);
     await preencherLocal(tela);
@@ -108,5 +124,84 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByText('Aplicar produtos'));
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
     expect(alerta).toHaveBeenCalledWith('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
+  });
+
+  test.each(['Executada', 'Frustrada', 'Não realizada'])(
+    'marca a visita como %s', async (status) => {
+      const tela = await render(<App visitasIniciais={[{
+        id: 'visita-1',
+        data: '10/11/2026',
+        local: 'Casa da família — Rua das Flores, 10',
+        servico: 'Inspeção',
+        orientacao: '',
+        status: 'Não realizada',
+      }]} />);
+
+      await fireEvent.press(tela.getByRole('button', { name: `Marcar visita como ${status}` }));
+      if (status === 'Executada') {
+        const chamadaConfirmacao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
+        await act(async () => chamadaConfirmacao[2].find((botao) => botao.text === 'Sim').onPress());
+      }
+
+      expect(tela.getByText(`Status: ${status}`)).toBeTruthy();
+    }
+  );
+
+  test('move a visita executada para a lista de concluídas', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1',
+      data: '10/11/2026',
+      local: 'Casa da família — Rua das Flores, 10',
+      servico: 'Inspeção',
+      status: 'Não realizada',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Marcar visita como Executada' }));
+    const chamadaConfirmacao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
+    await act(async () => chamadaConfirmacao[2].find((botao) => botao.text === 'Sim').onPress());
+
+    expect(tela.getByText('Visitas concluídas')).toBeTruthy();
+    expect(tela.getByText('Nenhuma visita programada.')).toBeTruthy();
+    expect(tela.getByText('Status: Executada')).toBeTruthy();
+    expect(tela.getByText('✓ Visita concluída')).toBeTruthy();
+    expect(tela.queryByRole('button', { name: 'Marcar visita como Frustrada' })).toBeNull();
+  });
+
+  test.each(['Frustrada', 'Não realizada'])(
+    'permite informar o motivo quando a visita fica %s', async (status) => {
+      const tela = await render(<App visitasIniciais={[{
+        id: 'visita-1',
+        data: '10/11/2026',
+        local: 'Casa da família — Rua das Flores, 10',
+        servico: 'Inspeção',
+        status: 'Não realizada',
+      }]} />);
+
+      await fireEvent.press(tela.getByRole('button', { name: `Marcar visita como ${status}` }));
+      await fireEvent.changeText(tela.getByLabelText('Motivo da visita'), 'Cliente não estava no local.');
+      await fireEvent.press(tela.getByRole('button', { name: 'Salvar justificativa' }));
+
+      expect(tela.getByText('Justificativa registrada.')).toBeTruthy();
+      expect(tela.getByDisplayValue('Cliente não estava no local.')).toBeTruthy();
+    }
+  );
+
+  test('pergunta antes de concluir e permite cancelar', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1',
+      data: '10/11/2026',
+      local: 'Casa da família — Rua das Flores, 10',
+      servico: 'Inspeção',
+      status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Marcar visita como Executada' }));
+
+    const chamadaConfirmacao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
+    expect(chamadaConfirmacao[1]).toBe('A visita será movida para Visitas concluídas e não poderá ser alterada.');
+    await act(async () => chamadaConfirmacao[2].find((botao) => botao.text === 'Não').onPress());
+
+    expect(tela.getByText('Status: Pendente')).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Marcar visita como Executada' })).toBeTruthy();
   });
 });
