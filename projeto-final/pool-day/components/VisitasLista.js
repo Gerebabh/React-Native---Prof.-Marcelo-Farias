@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 const statusDisponiveis = ['Executada', 'Frustrada', 'Não realizada'];
 
-export default function VisitasLista({ visitas, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+export default function VisitasLista({ visitas, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   if (visitas.length === 0) {
     return <Text style={styles.vazio}>Nenhuma visita programada.</Text>;
   }
@@ -20,7 +20,7 @@ export default function VisitasLista({ visitas, onChangeStatus, onConfirmConclus
           data={visitasEmAberto}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
-          renderItem={({ item }) => <VisitaCartao item={item} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+          renderItem={({ item }) => <VisitaCartao item={item} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
         />
       )}
       {visitasConcluidas.length > 0 && (
@@ -30,7 +30,7 @@ export default function VisitasLista({ visitas, onChangeStatus, onConfirmConclus
             data={visitasConcluidas}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => <VisitaCartao item={item} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+            renderItem={({ item }) => <VisitaCartao item={item} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
           />
         </>
       )}
@@ -38,7 +38,7 @@ export default function VisitasLista({ visitas, onChangeStatus, onConfirmConclus
   );
 }
 
-function VisitaCartao({ item, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+function VisitaCartao({ item, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   const [motivo, setMotivo] = useState(item.justificativa || '');
   const [motivoSalvo, setMotivoSalvo] = useState(Boolean(item.justificativa));
   const statusAtual = item.status || 'Pendente';
@@ -61,6 +61,33 @@ function VisitaCartao({ item, onChangeStatus, onConfirmConclusion, onChangeJusti
       <Text style={styles.servico}>{item.servico}</Text>
       {item.orientacao ? <Text style={styles.orientacao}>{item.orientacao}</Text> : null}
       <Text style={styles.status}>Status: {statusAtual}</Text>
+      {item.horarioChegada ? (
+        <>
+          <Text style={styles.registroChegada}>Horário de chegada: {new Date(item.horarioChegada).toLocaleString('pt-BR')}</Text>
+          <Text style={styles.registroChegada}>Endereço da chegada: {item.enderecoChegada || `${item.latitude.toFixed(2)}, ${item.longitude.toFixed(2)}`}</Text>
+          {item.horarioSaida ? (
+            <Text style={styles.registroChegada}>Horário de saída: {new Date(item.horarioSaida).toLocaleString('pt-BR')}</Text>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Registrar saída"
+              onPress={() => onRegisterDeparture(item.id)}
+              style={({ pressed }) => [styles.botaoChegada, pressed && styles.pressionado]}
+            >
+              <Text style={styles.textoBotaoChegada}>Registrar saída</Text>
+            </Pressable>
+          )}
+        </>
+      ) : statusAtual !== 'Executada' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Estou aqui"
+          onPress={() => onCheckIn(item.id)}
+          style={({ pressed }) => [styles.botaoChegada, pressed && styles.pressionado]}
+        >
+          <Text style={styles.textoBotaoChegada}>Estou aqui</Text>
+        </Pressable>
+      ) : null}
       {precisaJustificativa && (
         <>
           <TextInput
@@ -90,16 +117,17 @@ function VisitaCartao({ item, onChangeStatus, onConfirmConclusion, onChangeJusti
               key={status}
               accessibilityRole="button"
               accessibilityLabel={`Marcar visita como ${status}`}
+              accessibilityState={{ selected: item.status === status }}
               onPress={() => status === 'Executada' ? onConfirmConclusion(item.id) : onChangeStatus(item.id, status)}
               style={({ pressed }) => [
                 styles.botaoStatus,
-                statusAtual === status && styles.statusSelecionado,
+                item.status === status && styles.statusSelecionado,
                 pressed && styles.pressionado,
               ]}
             >
               <Text style={[
                 styles.textoStatus,
-                statusAtual === status && styles.textoStatusSelecionado,
+                item.status === status && styles.textoStatusSelecionado,
               ]}>{status}</Text>
             </Pressable>
           ))}
@@ -128,4 +156,7 @@ const styles = StyleSheet.create({
   textoBotaoSalvar: { color: '#fff', fontSize: 14, fontWeight: '600' },
   confirmacao: { color: '#276749', fontSize: 14, fontWeight: '600', marginTop: 8 },
   confirmacaoConcluida: { color: '#276749', fontSize: 15, fontWeight: '700', marginTop: 12 },
+  botaoChegada: { alignItems: 'center', backgroundColor: '#123b4a', borderRadius: 8, marginTop: 12, padding: 11 },
+  textoBotaoChegada: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  registroChegada: { color: '#276749', fontSize: 14, fontWeight: '600', marginTop: 8 },
 });

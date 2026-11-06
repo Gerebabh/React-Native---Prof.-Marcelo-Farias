@@ -1,6 +1,16 @@
 import { Alert } from 'react-native';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import * as Location from 'expo-location';
 import App from '../App';
+
+jest.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  hasServicesEnabledAsync: jest.fn(),
+  getForegroundPermissionsAsync: jest.fn(),
+  requestForegroundPermissionsAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(),
+  reverseGeocodeAsync: jest.fn(),
+}));
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -36,8 +46,20 @@ jest.mock('@react-native-picker/picker', () => {
 describe('cadastro de cliente e visitas', () => {
   let alerta;
 
-  beforeEach(() => { alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
-  afterEach(() => { alerta.mockRestore(); });
+  beforeEach(() => {
+    alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    Location.hasServicesEnabledAsync.mockResolvedValue(true);
+    Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    Location.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: -15.79, longitude: -47.88 } });
+    Location.reverseGeocodeAsync.mockResolvedValue([{
+      street: 'Rua das Palmeiras', streetNumber: '45', district: 'Asa Norte', city: 'Brasília', region: 'DF',
+    }]);
+  });
+  afterEach(() => {
+    alerta.mockRestore();
+    jest.clearAllMocks();
+  });
 
   async function preencherLocal(tela, { cliente = 'Casa da família', endereco = 'Rua das Flores, 10', piscina = true, litragem = '13000' } = {}) {
     const { getByPlaceholderText, getByText, getByRole } = tela;
@@ -204,4 +226,104 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Status: Pendente')).toBeTruthy();
     expect(tela.getByRole('button', { name: 'Marcar visita como Executada' })).toBeTruthy();
   });
+
+  test('visita pendente começa sem status de resultado selecionado', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    expect(tela.getByRole('button', { name: 'Marcar visita como Frustrada' }).props.accessibilityState).toEqual({ selected: false });
+    expect(tela.queryByLabelText('Motivo da visita')).toBeNull();
+  });
+
+  test('Estou aqui registra horário e localização simulada', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1',
+      data: '10/11/2026',
+      local: 'Casa da família — Rua das Flores, 10',
+      servico: 'Inspeção',
+      status: 'Pendente',
+    }]} />);
+
+    await act(async () => {
+      await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
+    });
+
+    await waitFor(() => {
+      expect(tela.getByText(/Horário de chegada:/)).toBeTruthy();
+      expect(tela.getByText('Endereço da chegada: Rua das Palmeiras, 45 - Asa Norte - Brasília - DF')).toBeTruthy();
+    });
+    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(Location.getCurrentPositionAsync).toHaveBeenCalled();
+    expect(Location.reverseGeocodeAsync).toHaveBeenCalledWith({ latitude: -15.79, longitude: -47.88 });
+    expect(tela.queryByRole('button', { name: 'Estou aqui' })).toBeNull();
+  });
+
+  test('registra o horário de saída depois da chegada', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+      horarioChegada: '2026-11-06T10:00:00.000Z', latitude: -15.79, longitude: -47.88,
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
+
+    expect(tela.getByText(/Horário de saída:/)).toBeTruthy();
+    expect(tela.queryByRole('button', { name: 'Registrar saída' })).toBeNull();
+  });
+
+  test('avisa quando a permissão de localização é negada', async () => {
+    Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+    Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
+
+    const aviso = alerta.mock.calls.find(([titulo]) => titulo === 'Acesso à localização');
+    expect(aviso[1]).toBe('Para registrar a chegada, o Pool Day precisa usar o GPS do aparelho.');
+    await act(async () => aviso[2].find((botao) => botao.text === 'Continuar').onPress());
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith('Permissão necessária', 'Permita o acesso à localização para registrar sua chegada.'));
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+    expect(tela.getByRole('button', { name: 'Estou aqui' })).toBeTruthy();
+  });
+
+  test('avisa quando não consegue obter a localização', async () => {
+    Location.getCurrentPositionAsync.mockRejectedValue(new Error('GPS indisponível'));
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
+
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith('Localização indisponível', 'Não foi possível obter sua localização. Verifique o GPS e tente novamente.'));
+    expect(tela.getByRole('button', { name: 'Estou aqui' })).toBeTruthy();
+  });
+
+  test('avisa quando os serviços de localização estão desligados', async () => {
+    Location.hasServicesEnabledAsync.mockResolvedValue(false);
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
+
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith('Localização desativada', 'Ative o serviço de localização do aparelho e tente novamente.'));
+    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  test('mantém as coordenadas se não encontrar um endereço', async () => {
+    Location.reverseGeocodeAsync.mockResolvedValue([]);
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await act(async () => {
+      await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
+    });
+
+    await waitFor(() => expect(tela.getByText('Endereço da chegada: -15.79, -47.88')).toBeTruthy());
+  });
+
 });
