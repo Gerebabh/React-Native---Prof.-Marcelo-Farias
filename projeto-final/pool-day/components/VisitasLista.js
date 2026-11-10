@@ -1,9 +1,9 @@
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
 
 const statusDisponiveis = ['Executada', 'Frustrada', 'Não realizada'];
 
-export default function VisitasLista({ visitas, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+export default function VisitasLista({ visitas, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   if (visitas.length === 0) {
     return <Text style={styles.vazio}>Nenhuma visita programada.</Text>;
   }
@@ -20,7 +20,7 @@ export default function VisitasLista({ visitas, onCheckIn, onRegisterDeparture, 
           data={visitasEmAberto}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
-          renderItem={({ item }) => <VisitaCartao item={item} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+          renderItem={({ item }) => <VisitaCartao item={item} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
         />
       )}
       {visitasConcluidas.length > 0 && (
@@ -30,7 +30,7 @@ export default function VisitasLista({ visitas, onCheckIn, onRegisterDeparture, 
             data={visitasConcluidas}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => <VisitaCartao item={item} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+            renderItem={({ item }) => <VisitaCartao item={item} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
           />
         </>
       )}
@@ -38,7 +38,7 @@ export default function VisitasLista({ visitas, onCheckIn, onRegisterDeparture, 
   );
 }
 
-function VisitaCartao({ item, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   const [motivo, setMotivo] = useState(item.justificativa || '');
   const [motivoSalvo, setMotivoSalvo] = useState(Boolean(item.justificativa));
   const statusAtual = item.status || 'Pendente';
@@ -60,23 +60,10 @@ function VisitaCartao({ item, onCheckIn, onRegisterDeparture, onChangeStatus, on
       <Text style={styles.orientacao}>{item.local}</Text>
       <Text style={styles.servico}>{item.servico}</Text>
       {item.orientacao ? <Text style={styles.orientacao}>{item.orientacao}</Text> : null}
-      <Text style={styles.status}>Status: {statusAtual}</Text>
       {item.horarioChegada ? (
         <>
           <Text style={styles.registroChegada}>Horário de chegada: {new Date(item.horarioChegada).toLocaleString('pt-BR')}</Text>
           <Text style={styles.registroChegada}>Endereço da chegada: {item.enderecoChegada || `${item.latitude.toFixed(2)}, ${item.longitude.toFixed(2)}`}</Text>
-          {item.horarioSaida ? (
-            <Text style={styles.registroChegada}>Horário de saída: {new Date(item.horarioSaida).toLocaleString('pt-BR')}</Text>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Registrar saída"
-              onPress={() => onRegisterDeparture(item.id)}
-              style={({ pressed }) => [styles.botaoChegada, pressed && styles.pressionado]}
-            >
-              <Text style={styles.textoBotaoChegada}>Registrar saída</Text>
-            </Pressable>
-          )}
         </>
       ) : statusAtual !== 'Executada' ? (
         <Pressable
@@ -88,6 +75,39 @@ function VisitaCartao({ item, onCheckIn, onRegisterDeparture, onChangeStatus, on
           <Text style={styles.textoBotaoChegada}>Estou aqui</Text>
         </Pressable>
       ) : null}
+      <View style={styles.secaoFotos}>
+        <Text style={styles.tituloFotos}>Fotos do atendimento</Text>
+        <FotoEtapa
+          titulo="Antes do atendimento"
+          textoVazio="Nenhuma foto antes anexada."
+          acessibilidade="Foto antes do atendimento"
+          uri={item.fotoAntes}
+          onPress={() => onAddPhoto(item.id, 'fotoAntes')}
+        />
+        <FotoEtapa
+          titulo="Depois do atendimento"
+          textoVazio="Nenhuma foto depois anexada."
+          acessibilidade="Foto depois do atendimento"
+          observacao={item.servico === 'Aspiração - Liberar o uso' ? 'Obrigatória para registrar a saída.' : 'Opcional para este serviço.'}
+          uri={item.fotoDepois}
+          onPress={() => onAddPhoto(item.id, 'fotoDepois')}
+        />
+      </View>
+      {item.horarioChegada && (
+        item.horarioSaida ? (
+          <Text style={styles.registroSaida}>Horário de saída: {new Date(item.horarioSaida).toLocaleString('pt-BR')}</Text>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Registrar saída"
+            onPress={() => onRegisterDeparture(item.id)}
+            style={({ pressed }) => [styles.botaoSaida, pressed && styles.pressionado]}
+          >
+            <Text style={styles.textoBotaoChegada}>Registrar saída</Text>
+          </Pressable>
+        )
+      )}
+      <Text style={styles.status}>Status: {statusAtual}</Text>
       {precisaJustificativa && (
         <>
           <TextInput
@@ -137,6 +157,30 @@ function VisitaCartao({ item, onCheckIn, onRegisterDeparture, onChangeStatus, on
   );
 }
 
+function FotoEtapa({ titulo, textoVazio, acessibilidade, observacao, uri, onPress }) {
+  const etapa = titulo.startsWith('Antes') ? 'antes' : 'depois';
+
+  return (
+    <View style={styles.itemFoto}>
+      <Text style={styles.tituloEtapaFoto}>{titulo}</Text>
+      {uri ? (
+        <Image accessibilityLabel={acessibilidade} source={{ uri }} style={styles.imagemFoto} />
+      ) : (
+        <Text style={styles.fotoVazia}>{textoVazio}</Text>
+      )}
+      {observacao && <Text style={styles.observacaoFoto}>{observacao}</Text>}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${uri ? 'Alterar' : 'Adicionar'} foto ${etapa}`}
+        onPress={onPress}
+        style={({ pressed }) => [styles.botaoFoto, pressed && styles.pressionado]}
+      >
+        <Text style={styles.textoBotaoFoto}>{uri ? `Alterar foto ${etapa}` : `Adicionar foto ${etapa}`}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   vazio: { color: '#526168', fontSize: 15, marginTop: 8 },
   cartao: { backgroundColor: '#fff', borderRadius: 10, marginTop: 10, padding: 16 },
@@ -159,4 +203,15 @@ const styles = StyleSheet.create({
   botaoChegada: { alignItems: 'center', backgroundColor: '#123b4a', borderRadius: 8, marginTop: 12, padding: 11 },
   textoBotaoChegada: { color: '#fff', fontSize: 15, fontWeight: '600' },
   registroChegada: { color: '#276749', fontSize: 14, fontWeight: '600', marginTop: 8 },
+  secaoFotos: { backgroundColor: '#f7f9fa', borderRadius: 8, marginTop: 12, padding: 12 },
+  tituloFotos: { color: '#123b4a', fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  itemFoto: { borderTopColor: '#d5dfe2', borderTopWidth: 1, marginTop: 8, paddingTop: 8 },
+  tituloEtapaFoto: { color: '#252d31', fontSize: 14, fontWeight: '600' },
+  fotoVazia: { color: '#526168', fontSize: 13, marginTop: 6 },
+  imagemFoto: { borderRadius: 8, height: 150, marginTop: 8, width: '100%' },
+  botaoFoto: { alignItems: 'center', backgroundColor: '#123b4a', borderRadius: 8, marginTop: 8, padding: 10 },
+  textoBotaoFoto: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  observacaoFoto: { color: '#526168', fontSize: 12, marginTop: 4 },
+  botaoSaida: { alignItems: 'center', backgroundColor: '#e8703a', borderRadius: 8, marginTop: 12, padding: 11 },
+  registroSaida: { color: '#276749', fontSize: 14, fontWeight: '600', marginTop: 12 },
 });
