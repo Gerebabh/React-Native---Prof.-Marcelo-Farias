@@ -9,3 +9,7 @@ Instale as dependências com `npm install` e inicie o Expo com `npx expo start`.
 ## Testes
 
 Execute os testes com `npm test`.
+
+## Documentação
+
+- [Modelo de empresas e usuários](docs/modelo-empresas-usuarios.md)
