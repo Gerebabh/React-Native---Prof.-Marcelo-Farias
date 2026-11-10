@@ -7,18 +7,23 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import Autenticacao from './components/Autenticacao';
 
 export default function App(props) {
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.areaSegura}>
-        <ConteudoApp {...props} />
-      </SafeAreaView>
+      <Autenticacao>
+        {({ usuario, perfil, aoSair }) => (
+          <SafeAreaView style={styles.areaSegura}>
+            <ConteudoApp {...props} usuario={usuario} perfil={perfil} aoSair={aoSair} />
+          </SafeAreaView>
+        )}
+      </Autenticacao>
     </SafeAreaProvider>
   );
 }
 
-function ConteudoApp({ visitasIniciais = [] }) {
+function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const [cliente, setCliente] = useState('');
   const [endereco, setEndereco] = useState('');
   const [tipoPiscina, setTipoPiscina] = useState('');
@@ -262,6 +267,10 @@ function ConteudoApp({ visitasIniciais = [] }) {
       <View style={styles.cabecalho}>
         <Text style={styles.titulo}>Pool Day</Text>
         <Text style={styles.subtitulo}>Tratamento e visitas programadas</Text>
+        <Text style={styles.infoConta}>{perfil.nomeEmpresa} • {perfil.nome || usuario.email}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Sair da conta" onPress={aoSair} style={styles.botaoSair}>
+          <Text style={styles.textoBotaoSair}>Sair da conta</Text>
+        </Pressable>
       </View>
 
       <View style={styles.formulario}>
@@ -323,6 +332,9 @@ const styles = StyleSheet.create({
   cabecalho: { backgroundColor: '#123b4a', borderRadius: 14, marginBottom: 20, padding: 20 },
   titulo: { color: '#fff', fontSize: 30, fontWeight: '700' },
   subtitulo: { color: '#d5e5e9', fontSize: 15, marginTop: 6 },
+  infoConta: { color: '#d5e5e9', fontSize: 13, marginTop: 14 },
+  botaoSair: { alignSelf: 'flex-start', borderColor: '#d5e5e9', borderRadius: 7, borderWidth: 1, marginTop: 10, paddingHorizontal: 11, paddingVertical: 7 },
+  textoBotaoSair: { color: '#fff', fontSize: 13, fontWeight: '600' },
   formulario: { backgroundColor: '#fff', borderRadius: 14, padding: 18 },
   tituloSecao: { color: '#123b4a', fontSize: 19, fontWeight: '600', marginBottom: 12 },
   rotulo: { color: '#526168', fontSize: 14, fontWeight: '600', marginBottom: 4 },
