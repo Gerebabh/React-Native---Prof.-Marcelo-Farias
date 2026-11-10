@@ -4,6 +4,16 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import App from '../App';
 
+jest.mock('../components/Autenticacao', () => {
+  return function AutenticacaoTeste({ children }) {
+    return children({
+      usuario: { uid: 'usuario-teste', email: 'teste@poolday.com' },
+      perfil: { empresaId: 'empresa-teste', nome: 'Pessoa Teste', nomeEmpresa: 'Pool Day Teste', papel: 'responsavel' },
+      aoSair: jest.fn(),
+    });
+  };
+});
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
   launchCameraAsync: jest.fn(),

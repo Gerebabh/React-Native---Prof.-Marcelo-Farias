@@ -7,6 +7,7 @@ Este documento registra a estrutura proposta para o Pool Day atender mais de uma
 Os registros de trabalho ficam dentro da empresa. Assim, cada consulta começa pelo identificador da empresa do usuário.
 
 ```text
+usuarios/{usuarioId}
 empresas/{empresaId}
   membros/{usuarioId}
   clientes/{clienteId}
@@ -34,6 +35,8 @@ Documento `empresas/{empresaId}/membros/{usuarioId}`:
 - `criadoEm`
 
 O ID do documento é o UID do Firebase Authentication. O membro pertence à empresa indicada pelo caminho.
+
+O documento `usuarios/{usuarioId}` guarda `empresaId`, `nome` e `email`. Esse perfil permite localizar a empresa do usuário após o login. O papel e a situação do acesso são conferidos no documento do membro dentro da empresa.
 
 ### Cliente, local e piscina
 
