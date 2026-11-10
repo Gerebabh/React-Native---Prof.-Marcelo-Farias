@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function caminhoMembro(empresaId, usuarioId) {
+      return /databases/$(database)/documents/empresas/$(empresaId)/membros/$(usuarioId);
+    }
+
+    function membroAtivo(empresaId) {
+      return autenticado()
+        && exists(caminhoMembro(empresaId, request.auth.uid))
+        && get(caminhoMembro(empresaId, request.auth.uid)).data.ativo == true;
+    }
+
+    function responsavel(empresaId) {
+      return membroAtivo(empresaId)
+        && get(caminhoMembro(empresaId, request.auth.uid)).data.papel == 'responsavel';
+    }
+
+    function tratador(empresaId) {
+      return membroAtivo(empresaId)
+        && get(caminhoMembro(empresaId, request.auth.uid)).data.papel == 'tratador';
+    }
+
+    match /usuarios/{usuarioId} {
+      allow get: if autenticado() && request.auth.uid == usuarioId;
+      allow list, create, update, delete: if false;
+    }
+
+    match /empresas/{empresaId} {
+      allow get: if membroAtivo(empresaId);
+      allow list, create, update, delete: if false;
+
+      match /membros/{membroId} {
+        allow get: if (autenticado() && request.auth.uid == membroId && membroAtivo(empresaId))
+          || responsavel(empresaId);
+        allow list: if responsavel(empresaId);
+        allow create, update, delete: if false;
+      }
+
+      match /clientes/{clienteId} {
+        allow read: if responsavel(empresaId) || tratador(empresaId);
+        allow write: if responsavel(empresaId);
+      }
+
+      match /locais/{localId} {
+        allow read: if responsavel(empresaId) || tratador(empresaId);
+        allow write: if responsavel(empresaId);
+      }
+
+      match /piscinas/{piscinaId} {
+        allow read: if responsavel(empresaId) || tratador(empresaId);
+        allow write: if responsavel(empresaId);
+      }
+
+      match /visitas/{visitaId} {
+        allow get: if responsavel(empresaId)
+          || (tratador(empresaId) && resource.data.tratadorUid == request.auth.uid);
+        allow list: if responsavel(empresaId)
+          || (tratador(empresaId) && resource.data.tratadorUid == request.auth.uid);
+        allow create, delete: if responsavel(empresaId);
+        allow update: if responsavel(empresaId)
+          || (tratador(empresaId)
+            && resource.data.tratadorUid == request.auth.uid
+            && request.resource.data.tratadorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'justificativa', 'horarioChegada', 'latitude',
+              'longitude', 'enderecoChegada', 'horarioSaida',
+              'latitudeSaida', 'longitudeSaida', 'enderecoSaida',
+              'fotoAntes', 'fotoDepois'
+            ]));
+      }
+    }
+
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
