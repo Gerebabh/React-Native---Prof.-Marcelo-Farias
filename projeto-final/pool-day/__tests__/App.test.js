@@ -1,7 +1,14 @@
 import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import App from '../App';
+
+jest.mock('expo-image-picker', () => ({
+  launchImageLibraryAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
+}), { virtual: true });
 
 jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
@@ -55,6 +62,9 @@ describe('cadastro de cliente e visitas', () => {
     Location.reverseGeocodeAsync.mockResolvedValue([{
       street: 'Rua das Palmeiras', streetNumber: '45', district: 'Asa Norte', city: 'Brasília', region: 'DF',
     }]);
+    ImagePicker.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
+    ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
+    ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
   });
   afterEach(() => {
     alerta.mockRestore();
@@ -271,6 +281,31 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.queryByRole('button', { name: 'Registrar saída' })).toBeNull();
   });
 
+  test('exige foto depois antes de registrar saída da aspiração', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Aspiração - Liberar o uso', status: 'Pendente',
+      horarioChegada: '2026-11-10T10:00:00.000Z', latitude: -15.79, longitude: -47.88,
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
+
+    expect(alerta).toHaveBeenCalledWith('Foto depois obrigatória', 'Anexe a foto depois da aspiração antes de registrar a saída.');
+    expect(tela.queryByText(/Horário de saída:/)).toBeNull();
+    expect(tela.getByRole('button', { name: 'Registrar saída' })).toBeTruthy();
+  });
+
+  test('permite registrar saída da aspiração com foto depois', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Aspiração - Liberar o uso', status: 'Pendente',
+      horarioChegada: '2026-11-10T10:00:00.000Z', latitude: -15.79, longitude: -47.88, fotoDepois: 'file:///foto-depois.jpg',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
+
+    expect(tela.getByText(/Horário de saída:/)).toBeTruthy();
+    expect(alerta).not.toHaveBeenCalled();
+  });
+
   test('avisa quando a permissão de localização é negada', async () => {
     Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
     Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
@@ -324,6 +359,66 @@ describe('cadastro de cliente e visitas', () => {
     });
 
     await waitFor(() => expect(tela.getByText('Endereço da chegada: -15.79, -47.88')).toBeTruthy());
+  });
+
+  test('mostra quando uma visita ainda não tem fotos', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    expect(tela.getByText('Nenhuma foto antes anexada.')).toBeTruthy();
+    expect(tela.getByText('Nenhuma foto depois anexada.')).toBeTruthy();
+  });
+
+  test('anexa fotos do antes e depois pela galeria', async () => {
+    ImagePicker.launchImageLibraryAsync
+      .mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///foto-antes.jpg' }] })
+      .mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///foto-depois.jpg' }] });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
+    let escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
+    await act(async () => escolha[2].find((botao) => botao.text === 'Galeria').onPress());
+    await waitFor(() => expect(tela.getByLabelText('Foto antes do atendimento')).toBeTruthy());
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto depois' }));
+    escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto depois do atendimento');
+    await act(async () => escolha[2].find((botao) => botao.text === 'Galeria').onPress());
+    await waitFor(() => expect(tela.getByLabelText('Foto depois do atendimento')).toBeTruthy());
+
+    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(2);
+  });
+
+  test('tira foto do atendimento com a câmera', async () => {
+    ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///foto-camera.jpg' }] });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
+    const escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
+    await act(async () => escolha[2].find((botao) => botao.text === 'Câmera').onPress());
+
+    await waitFor(() => expect(tela.getByLabelText('Foto antes do atendimento')).toBeTruthy());
+    expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
+    expect(ImagePicker.launchCameraAsync).toHaveBeenCalled();
+  });
+
+  test('avisa quando a permissão da câmera é negada', async () => {
+    ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ granted: false });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
+    const escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
+    await act(async () => escolha[2].find((botao) => botao.text === 'Câmera').onPress());
+
+    expect(alerta).toHaveBeenCalledWith('Permissão necessária', 'Permita o acesso à câmera para tirar a foto do atendimento.');
+    expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+    expect(tela.getByText('Nenhuma foto antes anexada.')).toBeTruthy();
   });
 
 });

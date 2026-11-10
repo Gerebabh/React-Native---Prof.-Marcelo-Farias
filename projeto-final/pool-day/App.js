@@ -6,6 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function App(props) {
   return (
@@ -182,9 +183,74 @@ function ConteudoApp({ visitasIniciais = [] }) {
   }
 
   function registrarSaida(id) {
+    const visita = visitas.find((item) => item.id === id);
+
+    if (visita?.servico === 'Aspiração - Liberar o uso' && !visita.fotoDepois) {
+      Alert.alert('Foto depois obrigatória', 'Anexe a foto depois da aspiração antes de registrar a saída.');
+      return;
+    }
+
     const horarioSaida = new Date().toISOString();
     setVisitas((listaAtual) => listaAtual.map((visita) =>
       visita.id === id ? { ...visita, horarioSaida } : visita
+    ));
+  }
+
+  function adicionarFoto(id, campoFoto) {
+    const etapa = campoFoto === 'fotoAntes' ? 'antes' : 'depois';
+    Alert.alert(
+      `Foto ${etapa} do atendimento`,
+      'Escolha como deseja adicionar a foto.',
+      [
+        { text: 'Cancelar', style: 'cancel', onPress: () => {} },
+        { text: 'Galeria', onPress: () => escolherFotoGaleria(id, campoFoto) },
+        { text: 'Câmera', onPress: () => tirarFoto(id, campoFoto) },
+      ]
+    );
+  }
+
+  async function escolherFotoGaleria(id, campoFoto) {
+    try {
+      const resultado = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!resultado.canceled && resultado.assets?.[0]?.uri) {
+        salvarFotoVisita(id, campoFoto, resultado.assets[0].uri);
+      }
+    } catch (erro) {
+      Alert.alert('Não foi possível adicionar a foto', 'Tente escolher outra imagem da galeria.');
+    }
+  }
+
+  async function tirarFoto(id, campoFoto) {
+    try {
+      const permissao = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permissao.granted) {
+        Alert.alert('Permissão necessária', 'Permita o acesso à câmera para tirar a foto do atendimento.');
+        return;
+      }
+
+      const resultado = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!resultado.canceled && resultado.assets?.[0]?.uri) {
+        salvarFotoVisita(id, campoFoto, resultado.assets[0].uri);
+      }
+    } catch (erro) {
+      Alert.alert('Não foi possível tirar a foto', 'Verifique a câmera do aparelho e tente novamente.');
+    }
+  }
+
+  function salvarFotoVisita(id, campoFoto, uri) {
+    setVisitas((listaAtual) => listaAtual.map((visita) =>
+      visita.id === id ? { ...visita, [campoFoto]: uri } : visita
     ));
   }
 
@@ -233,7 +299,7 @@ function ConteudoApp({ visitasIniciais = [] }) {
         <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: '#c65326' }}>
           <Text style={styles.textoBotao}>Adicionar visita</Text>
         </Pressable>
-        <VisitasLista visitas={visitas} onCheckIn={registrarChegada} onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
+        <VisitasLista visitas={visitas} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada} onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
       </View>
     </ScrollView>
     </KeyboardAvoidingView>
