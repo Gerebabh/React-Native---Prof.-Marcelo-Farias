@@ -20,6 +20,7 @@ const {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } = require('firebase/firestore');
 
 const empresaA = 'empresa-a';
@@ -171,5 +172,88 @@ describe('regras de acesso por empresa e papel', () => {
   test('membro inativo não acessa os dados da empresa', async () => {
     const banco = firestoreDo('membro-inativo');
     await assertFails(getDoc(doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-a'))));
+  });
+
+  test('responsável ativo cria perfil e vínculo de tratador no mesmo lote', async () => {
+    const banco = firestoreDo(usuarioResponsavelA);
+    const novoUsuario = 'tratador-novo';
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, `usuarios/${novoUsuario}`), {
+      empresaId: empresaA,
+      nome: 'Novo tratador',
+      email: 'novo@poolday.com',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaA, 'membros', novoUsuario)), {
+      nome: 'Novo tratador',
+      email: 'novo@poolday.com',
+      papel: 'tratador',
+      ativo: true,
+      criadoEm: '2026-11-12T12:00:00.000Z',
+    });
+
+    await assertSucceeds(lote.commit());
+  });
+
+  test('tratador não pode criar outro vínculo de membro', async () => {
+    const banco = firestoreDo(usuarioTratadorA);
+    const novoUsuario = 'tratador-bloqueado';
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, `usuarios/${novoUsuario}`), {
+      empresaId: empresaA,
+      nome: 'Tratador bloqueado',
+      email: 'bloqueado@poolday.com',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaA, 'membros', novoUsuario)), {
+      nome: 'Tratador bloqueado',
+      email: 'bloqueado@poolday.com',
+      papel: 'tratador',
+      ativo: true,
+      criadoEm: '2026-11-12T12:00:00.000Z',
+    });
+
+    await assertFails(lote.commit());
+  });
+
+  test('responsável não pode criar membro com papel de responsável', async () => {
+    const banco = firestoreDo(usuarioResponsavelA);
+    const novoUsuario = 'responsavel-nao-autorizado';
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, `usuarios/${novoUsuario}`), {
+      empresaId: empresaA,
+      nome: 'Outro responsável',
+      email: 'outro@poolday.com',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaA, 'membros', novoUsuario)), {
+      nome: 'Outro responsável',
+      email: 'outro@poolday.com',
+      papel: 'responsavel',
+      ativo: true,
+      criadoEm: '2026-11-12T12:00:00.000Z',
+    });
+
+    await assertFails(lote.commit());
+  });
+
+  test('responsável não pode vincular à empresa A um usuário associado à empresa B', async () => {
+    const banco = firestoreDo(usuarioResponsavelA);
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, `usuarios/${usuarioResponsavelB}`), {
+      empresaId: empresaA,
+      nome: 'Responsável B',
+      email: 'responsavel-b@poolday.com',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaA, 'membros', usuarioResponsavelB)), {
+      nome: 'Responsável B',
+      email: 'responsavel-b@poolday.com',
+      papel: 'tratador',
+      ativo: true,
+      criadoEm: '2026-11-12T12:00:00.000Z',
+    });
+
+    await assertFails(lote.commit());
   });
 });
