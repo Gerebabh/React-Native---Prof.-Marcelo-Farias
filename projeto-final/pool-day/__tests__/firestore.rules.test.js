@@ -1,5 +1,7 @@
 /** @jest-environment node */
 
+global.fetch = require('node-fetch');
+
 const fs = require('node:fs');
 const path = require('node:path');
 const {
@@ -68,9 +70,13 @@ async function prepararDocumentos() {
 }
 
 beforeAll(async () => {
+  // O CLI define esse valor durante emulators:exec; usamos o endereço explícito abaixo.
+  delete process.env.FIREBASE_EMULATOR_HUB;
   ambiente = await initializeTestEnvironment({
     projectId: 'demo-pool-day',
     firestore: {
+      host: '127.0.0.1',
+      port: 8080,
       rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8'),
     },
   });
@@ -82,7 +88,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await ambiente.cleanup();
+  if (ambiente) await ambiente.cleanup();
 });
 
 describe('regras de acesso por empresa e papel', () => {
