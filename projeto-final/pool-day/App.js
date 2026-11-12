@@ -12,6 +12,7 @@ import Autenticacao from './components/Autenticacao';
 import {
   atualizarVisita,
   convidarTratador,
+  enviarRecuperacaoSenha,
   observarPiscinas,
   observarTratadores,
   observarVisitas,
@@ -197,6 +198,15 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     atualizarDadosVisita(id, { justificativa });
   }
 
+  async function reenviarEmailConvite(email) {
+    try {
+      await enviarRecuperacaoSenha(email);
+      Alert.alert('E-mail reenviado', `Enviamos novamente as instruções para ${email}.`);
+    } catch (_erro) {
+      Alert.alert('Não foi possível reenviar', 'Confira sua conexão e tente novamente mais tarde.');
+    }
+  }
+
   async function enviarConvite() {
     if (!nomeTratador.trim() || !emailTratador.trim()) {
       Alert.alert('Cadastro incompleto', 'Informe o nome e o e-mail do tratador.');
@@ -205,25 +215,40 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
 
     setEnviandoConvite(true);
     try {
-      await convidarTratador(nomeTratador.trim(), emailTratador.trim());
+      await convidarTratador(perfil.empresaId, nomeTratador.trim(), emailTratador.trim());
       setNomeTratador('');
       setEmailTratador('');
       Alert.alert('Convite enviado', 'O tratador receberá um e-mail para definir a senha e acessar a empresa.');
     } catch (erro) {
-      Alert.alert(
-        erro.conviteCriado ? 'Conta criada' : 'Não foi possível enviar o convite',
-        erro.conviteCriado
-          ? 'A conta foi criada, mas o e-mail não foi enviado. Confira o endereço e tente novamente pelo Firebase.'
-          : erro.code === 'functions/already-exists'
-            ? 'Já existe uma conta com esse e-mail.'
-            : erro.code === 'functions/not-found'
-              ? 'O serviço de convites ainda não foi publicado no Firebase.'
-              : erro.code === 'functions/permission-denied'
-                ? 'Somente o responsável ativo da empresa pode convidar tratadores.'
-                : erro.code === 'functions/unavailable'
-                  ? 'O serviço de convites está indisponível. Verifique sua conexão e tente novamente.'
-                  : 'Não foi possível concluir o convite. Confira a publicação da função no Firebase e tente novamente.'
-      );
+      if (erro.conviteCriado) {
+        setNomeTratador('');
+        setEmailTratador('');
+        Alert.alert(
+          'Conta criada',
+          `A conta de ${erro.email} foi vinculada à empresa, mas o e-mail não chegou. Você pode tentar reenviar agora.`,
+          [
+            { text: 'Fechar', style: 'cancel' },
+            { text: 'Reenviar e-mail', onPress: () => reenviarEmailConvite(erro.email) },
+          ]
+        );
+        return;
+      }
+
+      if (erro.contaSemVinculo) {
+        Alert.alert('Cadastro incompleto', 'A conta foi criada, mas o vínculo com a empresa falhou e não pôde ser removido. Exclua essa conta no Firebase Authentication antes de tentar novamente.');
+        return;
+      }
+
+      const mensagem = erro.code === 'auth/email-already-in-use' || erro.code === 'auth/email-already-exists'
+        ? 'Já existe uma conta com esse e-mail.'
+        : erro.code === 'permission-denied'
+          ? 'Somente o responsável ativo pode convidar tratadores. Confira também as regras do Firestore.'
+          : erro.code === 'auth/network-request-failed'
+            ? 'Sem conexão com a internet. Confira a rede e tente novamente.'
+            : erro.code === 'auth/too-many-requests' || erro.code === 'auth/quota-exceeded'
+              ? 'O limite de envios foi atingido. Aguarde e tente novamente mais tarde.'
+              : 'Não foi possível concluir o convite. Confira os dados e tente novamente.';
+      Alert.alert('Não foi possível enviar o convite', mensagem);
     } finally {
       setEnviandoConvite(false);
     }

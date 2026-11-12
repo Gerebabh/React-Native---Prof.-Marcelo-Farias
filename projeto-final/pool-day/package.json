@@ -7,6 +7,7 @@
     "@react-native-community/datetimepicker": "9.1.0",
     "@react-native-picker/picker": "2.11.4",
     "expo": "~57.0.32",
+    "expo-crypto": "~57.0.4",
     "expo-image-picker": "~57.0.21",
     "expo-location": "~57.0.23",
     "expo-modules-core": "~57.0.24",
@@ -21,9 +22,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "jest --testPathIgnorePatterns firestore.rules.test.js functions",
+    "test": "jest --testPathIgnorePatterns firestore.rules.test.js",
     "test:regras": "firebase emulators:exec --project demo-pool-day --only firestore \"jest --runInBand --runTestsByPath __tests__/firestore.rules.test.js\"",
-    "test:funcoes": "npm test --prefix functions"
+    "test:firebase": "jest --runInBand --runTestsByPath __tests__/Firebase.test.js __tests__/App.test.js"
   },
   "private": true,
   "devDependencies": {
@@ -36,6 +37,8 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "testPathIgnorePatterns": ["/node_modules/", "/functions/"]
+    "testPathIgnorePatterns": [
+      "/node_modules/"
+    ]
   }
 }

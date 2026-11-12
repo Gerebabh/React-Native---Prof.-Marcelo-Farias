@@ -10,6 +10,7 @@ const mockSessao = { papel: 'responsavel' };
 jest.mock('../services/firebase', () => ({
   atualizarVisita: jest.fn(async () => {}),
   convidarTratador: jest.fn(async () => ({})),
+  enviarRecuperacaoSenha: jest.fn(async () => {}),
   observarPiscinas: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarTratadores: jest.fn((_empresaId, aoAtualizar) => {
     aoAtualizar([{ id: 'tratador-1', nome: 'Joana', email: 'joana@poolday.com' }]);
@@ -95,6 +96,7 @@ describe('cadastro de cliente e visitas', () => {
     ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
     ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
     Firebase.convidarTratador.mockResolvedValue({ uid: 'novo-tratador' });
+    Firebase.enviarRecuperacaoSenha.mockResolvedValue(undefined);
   });
   afterEach(() => {
     alerta.mockRestore();
@@ -152,8 +154,30 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.changeText(tela.getByPlaceholderText('E-mail do tratador'), 'joana@poolday.com');
     await fireEvent.press(tela.getByRole('button', { name: 'Convidar tratador' }));
 
-    await waitFor(() => expect(Firebase.convidarTratador).toHaveBeenCalledWith('Joana Lima', 'joana@poolday.com'));
+    await waitFor(() => expect(Firebase.convidarTratador).toHaveBeenCalledWith('empresa-teste', 'Joana Lima', 'joana@poolday.com'));
     expect(tela.getByText('Joana • joana@poolday.com')).toBeTruthy();
+  });
+
+  test('permite reenviar o e-mail quando a conta foi criada mas o convite falhou', async () => {
+    Firebase.convidarTratador.mockRejectedValueOnce(Object.assign(new Error('E-mail não enviado.'), {
+      conviteCriado: true,
+      email: 'joana@poolday.com',
+    }));
+    const tela = await render(<App />);
+    await fireEvent.changeText(tela.getByPlaceholderText('Nome do tratador'), 'Joana Lima');
+    await fireEvent.changeText(tela.getByPlaceholderText('E-mail do tratador'), 'joana@poolday.com');
+    await fireEvent.press(tela.getByRole('button', { name: 'Convidar tratador' }));
+
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith(
+      'Conta criada',
+      expect.stringContaining('joana@poolday.com'),
+      expect.any(Array)
+    ));
+    const alertaConvite = alerta.mock.calls.find(([titulo]) => titulo === 'Conta criada');
+    await act(async () => alertaConvite[2][1].onPress());
+
+    await waitFor(() => expect(Firebase.enviarRecuperacaoSenha).toHaveBeenCalledWith('joana@poolday.com'));
+    expect(alerta).toHaveBeenCalledWith('E-mail reenviado', expect.stringContaining('joana@poolday.com'));
   });
 
   test('tratador não vê os formulários de cadastro e convite da equipe', async () => {
