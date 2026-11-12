@@ -30,4 +30,4 @@ As regras não funcionam como filtros: se uma consulta puder retornar uma visita
 
 Os testes automatizados das regras usam o Firebase Local Emulator Suite e `@firebase/rules-unit-testing`. Instale o Firebase CLI (`npm install --global firebase-tools`) e Java 21 ou superior para usar a versão atual do emulador. Depois execute `npm run test:regras`. A configuração do emulador aponta para `firestore.rules` e usa a porta 8080.
 
-Os testes da criação de convites ficam em `functions/test` e podem ser executados com `npm run test:funcoes`. A função exige que o usuário conectado seja responsável ativo da empresa e cria o tratador apenas nessa empresa.
+O fluxo do convite é coberto pelos testes do app em `__tests__/Firebase.test.js` e pode ser executado com `npm run test:firebase`. Ele verifica a criação da conta em uma sessão separada, gravação do perfil e do vínculo, e-mail de definição de senha, e falhas de cadastro e envio.

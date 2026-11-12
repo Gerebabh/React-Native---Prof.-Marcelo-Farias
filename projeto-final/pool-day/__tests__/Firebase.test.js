@@ -3,31 +3,34 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
 
+jest.mock('expo-crypto', () => ({
+  getRandomBytesAsync: jest.fn(async () => Uint8Array.from({ length: 32 }, (_valor, indice) => indice + 1)),
+}));
+
 jest.mock('firebase/app', () => ({
-  getApp: jest.fn(() => ({ nome: 'app-teste' })),
+  getApp: jest.fn(() => ({ nome: 'app-teste', name: '[DEFAULT]' })),
   getApps: jest.fn(() => []),
-  initializeApp: jest.fn(() => ({ nome: 'app-teste' })),
+  initializeApp: jest.fn((_configuracao, nome) => ({ nome: nome || 'app-teste', name: nome || '[DEFAULT]' })),
 }));
 
 jest.mock('firebase/auth', () => ({
-  getAuth: jest.fn(() => ({ nome: 'auth-teste' })),
+  createUserWithEmailAndPassword: jest.fn(async (_auth, email) => ({ user: { uid: 'tratador-1', email } })),
+  deleteUser: jest.fn(async () => {}),
+  getAuth: jest.fn((app) => ({ nome: app?.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' })),
   getReactNativePersistence: jest.fn(() => 'persistencia-nativa'),
-  initializeAuth: jest.fn(() => ({ nome: 'auth-teste' })),
+  inMemoryPersistence: 'persistencia-em-memoria',
+  initializeAuth: jest.fn((app) => ({ nome: app.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' })),
   onAuthStateChanged: jest.fn(),
-  sendPasswordResetEmail: jest.fn(),
+  sendPasswordResetEmail: jest.fn(async () => {}),
   signInWithEmailAndPassword: jest.fn(),
-  signOut: jest.fn(),
+  signOut: jest.fn(async () => {}),
 }));
 
 jest.mock('firebase/firestore', () => ({
   doc: jest.fn((_banco, ...partes) => partes.join('/')),
   getDoc: jest.fn(),
   getFirestore: jest.fn(() => ({ nome: 'banco-teste' })),
-}));
-
-jest.mock('firebase/functions', () => ({
-  getFunctions: jest.fn(() => ({ nome: 'funcoes-teste' })),
-  httpsCallable: jest.fn(() => jest.fn(async () => ({ data: { uid: 'tratador-1', email: 'tratador@poolday.com' } }))),
+  writeBatch: jest.fn(() => ({ set: jest.fn(), commit: jest.fn(async () => {}) })),
 }));
 
 function carregarFirebase() {
@@ -42,8 +45,9 @@ function carregarFirebase() {
   return {
     firebase: require('../services/firebase'),
     authSdk: require('firebase/auth'),
+    appSdk: require('firebase/app'),
     firestore: require('firebase/firestore'),
-    functions: require('firebase/functions'),
+    crypto: require('expo-crypto'),
     storage: require('@react-native-async-storage/async-storage').default,
   };
 }
@@ -59,7 +63,7 @@ describe('serviço Firebase', () => {
     expect(firebase.firebaseConfigurado).toBe(true);
     expect(authSdk.getReactNativePersistence).toHaveBeenCalledWith(storage);
     expect(authSdk.initializeAuth).toHaveBeenCalledWith(
-      { nome: 'app-teste' },
+      { nome: 'app-teste', name: '[DEFAULT]' },
       { persistence: 'persistencia-nativa' }
     );
   });
@@ -92,14 +96,66 @@ describe('serviço Firebase', () => {
     expect(firestore.getDoc).toHaveBeenCalledTimes(2);
   });
 
-  test('cria convite pelo backend e envia e-mail para definir a senha', async () => {
-    const { firebase, authSdk, functions } = carregarFirebase();
+  test('cria conta em Auth separado, grava o vínculo no Firestore e envia e-mail em português', async () => {
+    const { firebase, authSdk, appSdk, firestore, crypto } = carregarFirebase();
 
-    await expect(firebase.convidarTratador('Joana', 'joana@poolday.com')).resolves.toEqual({
-      uid: 'tratador-1', email: 'tratador@poolday.com',
+    await expect(firebase.convidarTratador('empresa-1', '  Joana Lima  ', ' JOANA@poolday.com ')).resolves.toEqual({
+      uid: 'tratador-1', nome: 'Joana Lima', email: 'joana@poolday.com',
     });
-    expect(functions.httpsCallable).toHaveBeenCalledWith({ nome: 'funcoes-teste' }, 'convidarTratador');
-    expect(authSdk.sendPasswordResetEmail).toHaveBeenCalledWith({ nome: 'auth-teste' }, 'tratador@poolday.com');
+
+    expect(appSdk.initializeApp).toHaveBeenCalledWith(expect.any(Object), 'pool-day-convites');
+    expect(authSdk.initializeAuth).toHaveBeenCalledWith(
+      { nome: 'pool-day-convites', name: 'pool-day-convites' },
+      { persistence: 'persistencia-em-memoria' }
+    );
+    expect(crypto.getRandomBytesAsync).toHaveBeenCalledWith(32);
+    expect(authSdk.createUserWithEmailAndPassword).toHaveBeenCalledWith(
+      { nome: 'auth-convite-teste', languageCode: 'pt-BR' }, 'joana@poolday.com', expect.stringMatching(/^[A-Za-z0-9!@#$%*?]{32}$/)
+    );
+    const lote = firestore.writeBatch.mock.results[0].value;
+    expect(lote.set).toHaveBeenNthCalledWith(1, 'usuarios/tratador-1', {
+      empresaId: 'empresa-1', nome: 'Joana Lima', email: 'joana@poolday.com',
+    });
+    expect(lote.set).toHaveBeenNthCalledWith(2, 'empresas/empresa-1/membros/tratador-1', {
+      nome: 'Joana Lima', email: 'joana@poolday.com', papel: 'tratador', ativo: true, criadoEm: expect.any(String),
+    });
+    expect(lote.commit).toHaveBeenCalled();
+    expect(authSdk.sendPasswordResetEmail).toHaveBeenCalledWith(
+      { nome: 'auth-teste', languageCode: 'pt-BR' }, 'joana@poolday.com'
+    );
+    expect(authSdk.signOut).toHaveBeenCalledWith({ nome: 'auth-convite-teste', languageCode: 'pt-BR' });
+  });
+
+  test('não grava vínculo nem envia e-mail se o endereço já estiver cadastrado', async () => {
+    const { firebase, authSdk, firestore } = carregarFirebase();
+    const erro = Object.assign(new Error('E-mail em uso.'), { code: 'auth/email-already-in-use' });
+    authSdk.createUserWithEmailAndPassword.mockRejectedValueOnce(erro);
+
+    await expect(firebase.convidarTratador('empresa-1', 'Joana', 'joana@poolday.com')).rejects.toBe(erro);
+    expect(firestore.writeBatch).not.toHaveBeenCalled();
+    expect(authSdk.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('remove a conta do Auth quando o vínculo no Firestore falha', async () => {
+    const { firebase, authSdk, firestore } = carregarFirebase();
+    const erro = new Error('Falha ao gravar o vínculo.');
+    firestore.writeBatch.mockReturnValueOnce({ set: jest.fn(), commit: jest.fn(async () => { throw erro; }) });
+
+    await expect(firebase.convidarTratador('empresa-1', 'Joana', 'joana@poolday.com')).rejects.toBe(erro);
+    expect(authSdk.deleteUser).toHaveBeenCalledWith({ uid: 'tratador-1', email: 'joana@poolday.com' });
+    expect(authSdk.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('marca a conta como criada quando falha somente o envio do e-mail', async () => {
+    const { firebase, authSdk, firestore } = carregarFirebase();
+    const erro = Object.assign(new Error('E-mail não enviado.'), { code: 'auth/quota-exceeded' });
+    authSdk.sendPasswordResetEmail.mockRejectedValueOnce(erro);
+
+    await expect(firebase.convidarTratador('empresa-1', 'Joana', 'joana@poolday.com')).rejects.toMatchObject({
+      code: 'auth/quota-exceeded', conviteCriado: true, email: 'joana@poolday.com',
+    });
+    expect(firestore.writeBatch.mock.results[0].value.commit).toHaveBeenCalled();
+    expect(authSdk.deleteUser).not.toHaveBeenCalled();
   });
 
   test('traduz falhas comuns do login para mensagens em português', () => {

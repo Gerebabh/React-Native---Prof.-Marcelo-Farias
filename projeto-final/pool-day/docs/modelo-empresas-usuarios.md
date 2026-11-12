@@ -69,7 +69,7 @@ O responsável pode consultar e manter os dados da própria empresa. O tratador 
 
 O login usa Firebase Authentication e busca o perfil em `usuarios/{uid}`, a associação em `empresas/{empresaId}/membros/{uid}` e os dados da empresa em `empresas/{empresaId}`. Clientes, locais, piscinas e visitas são gravados nas coleções da empresa. O responsável consulta todas as visitas; o tratador consulta apenas as visitas em que `tratadorUid` corresponde ao próprio UID.
 
-A criação de contas de tratadores é feita pela função `convidarTratador`, que confirma o papel do responsável antes de criar a conta e os documentos de vínculo. O app envia um e-mail para o tratador definir a senha. Não se deve permitir a criação direta de documentos de membro pelo cliente.
+O responsável cria o convite pela tela Equipe. O app cria a conta em uma instância separada e temporária do Firebase Authentication, grava em lote o perfil `usuarios/{uid}` e o vínculo `empresas/{empresaId}/membros/{uid}`, e envia um e-mail do Firebase para definir a senha. A sessão separada evita desconectar o responsável durante o cadastro. As regras do Firestore permitem a gravação apenas quando o responsável está ativo na empresa.
 
 ## Conferências para as próximas etapas
 

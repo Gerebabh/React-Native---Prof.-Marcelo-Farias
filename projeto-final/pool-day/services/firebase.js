@@ -1,8 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRandomBytesAsync } from 'expo-crypto';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  createUserWithEmailAndPassword,
+  deleteUser,
   getAuth,
   getReactNativePersistence,
+  inMemoryPersistence,
   initializeAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -21,7 +25,6 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const configuracao = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -35,8 +38,8 @@ const configuracao = {
 export const firebaseConfigurado = Boolean(configuracao.apiKey && configuracao.projectId && configuracao.appId);
 
 let auth = null;
+let authConvites = null;
 let banco = null;
-let funcoes = null;
 
 if (firebaseConfigurado) {
   const aplicativo = getApps().length ? getApp() : initializeApp(configuracao);
@@ -51,12 +54,22 @@ if (firebaseConfigurado) {
   }
 
   auth.languageCode = 'pt-BR';
+
+  const aplicativoConvites = getApps().find((item) => item.name === 'pool-day-convites')
+    || initializeApp(configuracao, 'pool-day-convites');
+  try {
+    authConvites = initializeAuth(aplicativoConvites, { persistence: inMemoryPersistence });
+  } catch (erro) {
+    if (erro.code !== 'auth/already-initialized') throw erro;
+    authConvites = getAuth(aplicativoConvites);
+  }
+  authConvites.languageCode = 'pt-BR';
+
   banco = getFirestore(aplicativo);
-  funcoes = getFunctions(aplicativo, 'southamerica-east1');
 }
 
 function verificarConfiguracao() {
-  if (!firebaseConfigurado || !auth || !banco) {
+  if (!firebaseConfigurado || !auth || !authConvites || !banco) {
     const erro = new Error('Configure o Firebase antes de usar a autenticação.');
     erro.code = 'firebase/configuration-not-found';
     throw erro;
@@ -84,18 +97,88 @@ export async function enviarRecuperacaoSenha(email) {
   await sendPasswordResetEmail(auth, email);
 }
 
-export async function convidarTratador(nome, email) {
-  verificarConfiguracao();
-  const resultado = await httpsCallable(funcoes, 'convidarTratador')({ nome, email });
+async function gerarSenhaTemporaria() {
+  const bytes = await getRandomBytesAsync(32);
+  const minusculas = 'abcdefghijklmnopqrstuvwxyz';
+  const maiusculas = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const numeros = '0123456789';
+  const simbolos = '!@#$%*?';
+  const todos = minusculas + maiusculas + numeros + simbolos;
+  const senha = [
+    minusculas[bytes[0] % minusculas.length],
+    maiusculas[bytes[1] % maiusculas.length],
+    numeros[bytes[2] % numeros.length],
+    simbolos[bytes[3] % simbolos.length],
+  ];
 
-  try {
-    await sendPasswordResetEmail(auth, resultado.data.email);
-  } catch (erro) {
-    erro.conviteCriado = true;
+  for (let indice = 4; indice < bytes.length; indice += 1) {
+    senha.push(todos[bytes[indice] % todos.length]);
+  }
+
+  return senha.join('');
+}
+
+export async function convidarTratador(empresaId, nome, email) {
+  verificarConfiguracao();
+  const nomeTratador = typeof nome === 'string' ? nome.trim() : '';
+  const emailTratador = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+  if (!empresaId || !nomeTratador || !/^\S+@\S+\.\S+$/.test(emailTratador)) {
+    const erro = new Error('Informe o nome, o e-mail e a empresa do tratador.');
+    erro.code = 'auth/invalid-email';
     throw erro;
   }
 
-  return resultado.data;
+  const senhaTemporaria = await gerarSenhaTemporaria();
+  let usuarioCriado = null;
+
+  try {
+    const resultado = await createUserWithEmailAndPassword(authConvites, emailTratador, senhaTemporaria);
+    usuarioCriado = resultado.user;
+
+    try {
+      const lote = writeBatch(banco);
+      lote.set(doc(banco, 'usuarios', usuarioCriado.uid), {
+        empresaId,
+        nome: nomeTratador,
+        email: emailTratador,
+      });
+      lote.set(doc(banco, 'empresas', empresaId, 'membros', usuarioCriado.uid), {
+        nome: nomeTratador,
+        email: emailTratador,
+        papel: 'tratador',
+        ativo: true,
+        criadoEm: new Date().toISOString(),
+      });
+      await lote.commit();
+    } catch (erro) {
+      try {
+        await deleteUser(usuarioCriado);
+      } catch (_erroAoRemoverConta) {
+        erro.contaSemVinculo = true;
+        erro.email = emailTratador;
+      }
+      throw erro;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, emailTratador);
+    } catch (erro) {
+      erro.conviteCriado = true;
+      erro.email = emailTratador;
+      throw erro;
+    }
+
+    return { uid: usuarioCriado.uid, nome: nomeTratador, email: emailTratador };
+  } finally {
+    if (usuarioCriado) {
+      try {
+        await signOut(authConvites);
+      } catch (_erroAoEncerrarSessaoConvite) {
+        // A conta convidada usa uma sessão separada e temporária.
+      }
+    }
+  }
 }
 
 export function observarTratadores(empresaId, aoAtualizar, aoErro) {
