@@ -61,13 +61,13 @@ O responsável acompanha as visitas da empresa. O tratador trabalha nas visitas 
 
 ## Acesso e separação entre empresas
 
-O caminho `empresas/{empresaId}` define o limite dos dados. As regras do Firestore deverão confirmar que o usuário autenticado é membro daquela empresa e respeitar seu papel. A interface também consultará apenas os documentos da empresa atual, mas a separação precisa ser validada pelas regras do Firebase.
+O caminho `empresas/{empresaId}` define o limite dos dados. As regras em `firestore.rules` confirmam que o usuário está autenticado e tem um documento de membro ativo dentro da empresa indicada no caminho. A interface também deve consultar apenas os documentos da empresa atual; as regras do Firebase são a proteção final contra acesso a outra empresa.
 
-Uma visita atribuída a um tratador deve ter o UID dele em `tratadorUid`. A associação do usuário à empresa será verificada antes de permitir acesso à visita.
+O responsável pode consultar e manter os dados da própria empresa. O tratador pode consultar clientes, locais e piscinas da empresa e só pode consultar as visitas atribuídas ao seu UID em `tratadorUid`. Ele pode atualizar os dados da execução da visita, como status, justificativa, horários, localização e fotos, mas não pode criar ou excluir visitas nem alterar a atribuição. As consultas de visitas do tratador precisam incluir o filtro `tratadorUid == uid`; as regras não filtram resultados de consultas.
 
 ## Situação dos dados atuais
 
-Atualmente, clientes, locais e visitas são mantidos no estado do React Native. O projeto ainda não usa Firebase Authentication, Firestore ou Firebase Storage, então não há registros persistidos na nuvem para migrar. Quando a persistência for implementada, a criação da empresa deverá anteceder os novos cadastros, que já serão salvos dentro do caminho da empresa.
+Atualmente, clientes, locais e visitas ainda são mantidos no estado do React Native. O login usa Firebase Authentication e busca o perfil em `usuarios/{uid}`, a associação em `empresas/{empresaId}/membros/{uid}` e os dados da empresa em `empresas/{empresaId}`. As regras do Firestore negam operações sem autenticação, e a criação da empresa e dos membros deverá ser feita por um fluxo confiável antes de liberar o acesso ao usuário.
 
 ## Conferências para as próximas etapas
 
@@ -76,4 +76,4 @@ Atualmente, clientes, locais e visitas são mantidos no estado do React Native. 
 - O responsável pode consultar as visitas e os cadastros da própria empresa.
 - Uma visita aponta para o local, a piscina e o tratador corretos.
 
-As conferências de acesso serão automatizadas junto com a implementação das regras na issue #43.
+Os cenários e resultados esperados para conferir as regras estão em `docs/testes-regras-firestore.md`.
