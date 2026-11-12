@@ -59,6 +59,7 @@ function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChan
       <Text style={styles.data}>{item.data}</Text>
       <Text style={styles.orientacao}>{item.local}</Text>
       <Text style={styles.servico}>{item.servico}</Text>
+      {item.tratadorNome ? <Text style={styles.tratador}>Tratador: {item.tratadorNome}</Text> : null}
       {item.orientacao ? <Text style={styles.orientacao}>{item.orientacao}</Text> : null}
       {item.horarioChegada ? (
         <>
@@ -186,6 +187,7 @@ const styles = StyleSheet.create({
   cartao: { backgroundColor: '#fff', borderRadius: 10, marginTop: 10, padding: 16 },
   data: { color: '#526168', fontSize: 14 },
   servico: { color: '#123b4a', fontSize: 17, fontWeight: '600', marginTop: 4 },
+  tratador: { color: '#526168', fontSize: 14, marginTop: 5 },
   orientacao: { color: '#526168', fontSize: 15, marginTop: 6 },
   status: { color: '#252d31', fontSize: 15, fontWeight: '600', marginTop: 12 },
   acoesStatus: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },

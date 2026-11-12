@@ -25,6 +25,11 @@ jest.mock('firebase/firestore', () => ({
   getFirestore: jest.fn(() => ({ nome: 'banco-teste' })),
 }));
 
+jest.mock('firebase/functions', () => ({
+  getFunctions: jest.fn(() => ({ nome: 'funcoes-teste' })),
+  httpsCallable: jest.fn(() => jest.fn(async () => ({ data: { uid: 'tratador-1', email: 'tratador@poolday.com' } }))),
+}));
+
 function carregarFirebase() {
   process.env.EXPO_PUBLIC_FIREBASE_API_KEY = 'api-teste';
   process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN = 'pool-day.test';
@@ -38,6 +43,7 @@ function carregarFirebase() {
     firebase: require('../services/firebase'),
     authSdk: require('firebase/auth'),
     firestore: require('firebase/firestore'),
+    functions: require('firebase/functions'),
     storage: require('@react-native-async-storage/async-storage').default,
   };
 }
@@ -84,6 +90,16 @@ describe('serviço Firebase', () => {
 
     await expect(firebase.buscarPerfil('uid-ana')).resolves.toBeNull();
     expect(firestore.getDoc).toHaveBeenCalledTimes(2);
+  });
+
+  test('cria convite pelo backend e envia e-mail para definir a senha', async () => {
+    const { firebase, authSdk, functions } = carregarFirebase();
+
+    await expect(firebase.convidarTratador('Joana', 'joana@poolday.com')).resolves.toEqual({
+      uid: 'tratador-1', email: 'tratador@poolday.com',
+    });
+    expect(functions.httpsCallable).toHaveBeenCalledWith({ nome: 'funcoes-teste' }, 'convidarTratador');
+    expect(authSdk.sendPasswordResetEmail).toHaveBeenCalledWith({ nome: 'auth-teste' }, 'tratador@poolday.com');
   });
 
   test('traduz falhas comuns do login para mensagens em português', () => {

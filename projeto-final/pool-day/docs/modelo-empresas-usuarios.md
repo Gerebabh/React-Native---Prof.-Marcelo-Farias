@@ -67,7 +67,9 @@ O responsável pode consultar e manter os dados da própria empresa. O tratador 
 
 ## Situação dos dados atuais
 
-Atualmente, clientes, locais e visitas ainda são mantidos no estado do React Native. O login usa Firebase Authentication e busca o perfil em `usuarios/{uid}`, a associação em `empresas/{empresaId}/membros/{uid}` e os dados da empresa em `empresas/{empresaId}`. As regras do Firestore negam operações sem autenticação, e a criação da empresa e dos membros deverá ser feita por um fluxo confiável antes de liberar o acesso ao usuário.
+O login usa Firebase Authentication e busca o perfil em `usuarios/{uid}`, a associação em `empresas/{empresaId}/membros/{uid}` e os dados da empresa em `empresas/{empresaId}`. Clientes, locais, piscinas e visitas são gravados nas coleções da empresa. O responsável consulta todas as visitas; o tratador consulta apenas as visitas em que `tratadorUid` corresponde ao próprio UID.
+
+A criação de contas de tratadores é feita pela função `convidarTratador`, que confirma o papel do responsável antes de criar a conta e os documentos de vínculo. O app envia um e-mail para o tratador definir a senha. Não se deve permitir a criação direta de documentos de membro pelo cliente.
 
 ## Conferências para as próximas etapas
 
