@@ -1,3 +1,4 @@
+import { cores } from './styles/colors';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -215,7 +216,13 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
           ? 'A conta foi criada, mas o e-mail não foi enviado. Confira o endereço e tente novamente pelo Firebase.'
           : erro.code === 'functions/already-exists'
             ? 'Já existe uma conta com esse e-mail.'
-            : 'Confira o nome, o e-mail e sua conexão. Tente novamente.'
+            : erro.code === 'functions/not-found'
+              ? 'O serviço de convites ainda não foi publicado no Firebase.'
+              : erro.code === 'functions/permission-denied'
+                ? 'Somente o responsável ativo da empresa pode convidar tratadores.'
+                : erro.code === 'functions/unavailable'
+                  ? 'O serviço de convites está indisponível. Verifique sua conexão e tente novamente.'
+                  : 'Não foi possível concluir o convite. Confira a publicação da função no Firebase e tente novamente.'
       );
     } finally {
       setEnviandoConvite(false);
@@ -391,7 +398,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
           <Text style={styles.rotulo}>Tipo de piscina</Text>
           <View style={styles.seletor}><Picker selectedValue={tipoPiscina} onValueChange={setTipoPiscina}><Picker.Item label="Selecione o tipo" value="" /><Picker.Item label="Fibra" value="Fibra" /><Picker.Item label="Vinil" value="Vinil" /><Picker.Item label="Alvenaria" value="Alvenaria" /><Picker.Item label="Outros" value="Outros" /></Picker></View>
           <TextInput accessibilityLabel="Litragem em litros (ex.: 13000)" style={styles.campo} placeholder="Litragem em litros (ex.: 13000)" keyboardType="numeric" value={litragem} onChangeText={setLitragem} />
-          <Pressable accessibilityRole="button" onPress={salvarResidencia} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: '#c65326' }}>
+          <Pressable accessibilityRole="button" onPress={salvarResidencia} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
             <Text style={styles.textoBotao}>Salvar residência</Text>
           </Pressable>
         </View>
@@ -444,7 +451,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             <Text style={styles.rotulo}>Tipo de serviço</Text>
             <View style={styles.seletor}><Picker selectedValue={servico} onValueChange={setServico}><Picker.Item label="Selecione o serviço" value="" /><Picker.Item label="Aplicar produtos" value="Aplicar produtos" /><Picker.Item label="Aspiração - Liberar o uso" value="Aspiração - Liberar o uso" /><Picker.Item label="Inspeção" value="Inspeção" /></Picker></View>
             {servico === 'Aplicar produtos' && <TextInput style={styles.campo} placeholder="Orientação de produtos" value={orientacao} onChangeText={setOrientacao} />}
-            <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: '#c65326' }}>
+            <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
               <Text style={styles.textoBotao}>Adicionar visita</Text>
             </Pressable>
           </>
@@ -467,31 +474,31 @@ function inicioDoDia(data) {
 }
 
 const styles = StyleSheet.create({
-  areaSegura: { flex: 1, backgroundColor: '#f4f7f8' },
+  areaSegura: { flex: 1, backgroundColor: cores.fundoTela },
   teclado: { flex: 1 },
-  container: { flexGrow: 1, backgroundColor: '#f4f7f8', padding: 20, paddingTop: 16 },
-  cabecalho: { backgroundColor: '#123b4a', borderRadius: 14, marginBottom: 20, padding: 20 },
-  titulo: { color: '#fff', fontSize: 30, fontWeight: '700' },
-  subtitulo: { color: '#d5e5e9', fontSize: 15, marginTop: 6 },
-  infoConta: { color: '#d5e5e9', fontSize: 13, marginTop: 14 },
-  botaoSair: { alignSelf: 'flex-start', borderColor: '#d5e5e9', borderRadius: 7, borderWidth: 1, marginTop: 10, paddingHorizontal: 11, paddingVertical: 7 },
-  textoBotaoSair: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  formulario: { backgroundColor: '#fff', borderRadius: 14, padding: 18 },
-  tituloSecao: { color: '#123b4a', fontSize: 19, fontWeight: '600', marginBottom: 12 },
-  rotulo: { color: '#526168', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  seletor: { backgroundColor: '#f7f9fa', borderColor: '#d5dfe2', borderRadius: 8, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
-  campo: { backgroundColor: '#f7f9fa', borderColor: '#d5dfe2', borderRadius: 8, borderWidth: 1, fontSize: 16, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 11 },
-  campoData: { backgroundColor: '#f7f9fa', borderColor: '#d5dfe2', borderRadius: 8, borderWidth: 1, justifyContent: 'center', marginBottom: 12, minHeight: 46, paddingHorizontal: 12 },
-  placeholderData: { color: '#808080', fontSize: 16 },
-  textoData: { color: '#252d31', fontSize: 16 },
-  botao: { alignItems: 'center', backgroundColor: '#e8703a', borderRadius: 8, marginTop: 4, overflow: 'hidden', padding: 14 },
+  container: { flexGrow: 1, backgroundColor: cores.fundoTela, padding: 20, paddingTop: 16 },
+  cabecalho: { backgroundColor: cores.azulEscuro, borderRadius: 14, marginBottom: 20, padding: 20 },
+  titulo: { color: cores.branco, fontSize: 30, fontWeight: '700' },
+  subtitulo: { color: cores.azulClaro, fontSize: 15, marginTop: 6 },
+  infoConta: { color: cores.azulClaro, fontSize: 13, marginTop: 14 },
+  botaoSair: { alignSelf: 'flex-start', borderColor: cores.azulClaro, borderRadius: 7, borderWidth: 1, marginTop: 10, paddingHorizontal: 11, paddingVertical: 7 },
+  textoBotaoSair: { color: cores.branco, fontSize: 13, fontWeight: '600' },
+  formulario: { backgroundColor: cores.branco, borderRadius: 14, padding: 18 },
+  tituloSecao: { color: cores.azulEscuro, fontSize: 19, fontWeight: '600', marginBottom: 12 },
+  rotulo: { color: cores.textoSecundario, fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  seletor: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  campo: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, fontSize: 16, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 11 },
+  campoData: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, justifyContent: 'center', marginBottom: 12, minHeight: 46, paddingHorizontal: 12 },
+  placeholderData: { color: cores.cinza, fontSize: 16 },
+  textoData: { color: cores.texto, fontSize: 16 },
+  botao: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 8, marginTop: 4, overflow: 'hidden', padding: 14 },
   botaoPressionado: { opacity: 0.85 },
   botaoDesativado: { opacity: 0.6 },
-  textoBotao: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  cartaoResidencia: { backgroundColor: '#fff', borderColor: '#d5dfe2', borderRadius: 14, borderWidth: 1, marginTop: 20, padding: 18 },
-  tituloCartao: { color: '#123b4a', fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  nomeResidencia: { color: '#252d31', fontSize: 17, fontWeight: '600', marginBottom: 4 },
-  dadoResidencia: { color: '#526168', fontSize: 15, marginTop: 4 },
-  secaoVisitas: { backgroundColor: '#fff', borderRadius: 14, marginTop: 24, padding: 18 },
-  cartao: { backgroundColor: '#fff', borderRadius: 10, marginTop: 10, padding: 16 },
+  textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '600' },
+  cartaoResidencia: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 14, borderWidth: 1, marginTop: 20, padding: 18 },
+  tituloCartao: { color: cores.azulEscuro, fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  nomeResidencia: { color: cores.texto, fontSize: 17, fontWeight: '600', marginBottom: 4 },
+  dadoResidencia: { color: cores.textoSecundario, fontSize: 15, marginTop: 4 },
+  secaoVisitas: { backgroundColor: cores.branco, borderRadius: 14, marginTop: 24, padding: 18 },
+  cartao: { backgroundColor: cores.branco, borderRadius: 10, marginTop: 10, padding: 16 },
 });

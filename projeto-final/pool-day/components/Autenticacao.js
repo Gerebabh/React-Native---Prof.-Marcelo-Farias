@@ -1,3 +1,4 @@
+import { cores } from '../styles/colors';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -123,7 +124,7 @@ export default function Autenticacao({ children }) {
   if (estado === 'carregando' || estado === 'carregando-perfil') {
     return (
       <SafeAreaView style={styles.areaCarregando}>
-        <ActivityIndicator size="large" color="#e8703a" />
+        <ActivityIndicator size="large" color={cores.azulPiscina} />
         <Text style={styles.textoCarregando}>Conferindo acesso...</Text>
       </SafeAreaView>
     );
@@ -265,28 +266,28 @@ function TelaLogin({ erro, firebaseAtivo, carregando, onEntrar, onRecuperarSenha
 }
 
 const styles = StyleSheet.create({
-  areaCarregando: { alignItems: 'center', backgroundColor: '#f4f7f8', flex: 1, justifyContent: 'center' },
-  textoCarregando: { color: '#123b4a', fontSize: 15, marginTop: 12 },
-  areaLogin: { backgroundColor: '#123b4a', flex: 1 },
+  areaCarregando: { alignItems: 'center', backgroundColor: cores.fundoTela, flex: 1, justifyContent: 'center' },
+  textoCarregando: { color: cores.azulEscuro, fontSize: 15, marginTop: 12 },
+  areaLogin: { backgroundColor: cores.azulEscuro, flex: 1 },
   fundo: { flex: 1, justifyContent: 'center' },
-  sobreposicao: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8, 40, 52, 0.38)' },
+  sobreposicao: { ...StyleSheet.absoluteFillObject, backgroundColor: cores.sobreposicaoLogin },
   teclado: { flex: 1, justifyContent: 'center' },
   conteudoLogin: { flexGrow: 1, justifyContent: 'center', padding: 22 },
-  cartaoLogin: { alignSelf: 'center', backgroundColor: 'rgba(255, 255, 255, 0.96)', borderRadius: 20, maxWidth: 430, padding: 24, width: '100%' },
+  cartaoLogin: { alignSelf: 'center', backgroundColor: cores.cartaoLogin, borderRadius: 20, maxWidth: 430, padding: 24, width: '100%' },
   logo: { alignSelf: 'center', height: 170, marginBottom: 8, width: 220 },
-  tituloLogin: { color: '#123b4a', fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  subtituloLogin: { color: '#526168', fontSize: 14, marginBottom: 20, marginTop: 6, textAlign: 'center' },
-  campoLogin: { backgroundColor: '#f7f9fa', borderColor: '#d5dfe2', borderRadius: 9, borderWidth: 1, color: '#252d31', fontSize: 16, marginTop: 10, paddingHorizontal: 13, paddingVertical: 12 },
+  tituloLogin: { color: cores.azulEscuro, fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  subtituloLogin: { color: cores.textoSecundario, fontSize: 14, marginBottom: 20, marginTop: 6, textAlign: 'center' },
+  campoLogin: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 9, borderWidth: 1, color: cores.texto, fontSize: 16, marginTop: 10, paddingHorizontal: 13, paddingVertical: 12 },
   linkSenha: { alignSelf: 'flex-end', paddingVertical: 8 },
-  textoLink: { color: '#17627a', fontSize: 14, fontWeight: '600' },
-  erro: { color: '#a32828', fontSize: 14, marginTop: 10 },
-  botaoEntrar: { alignItems: 'center', backgroundColor: '#e8703a', borderRadius: 9, marginTop: 12, padding: 14 },
+  textoLink: { color: cores.azulPiscina, fontSize: 14, fontWeight: '600' },
+  erro: { color: cores.vermelho, fontSize: 14, marginTop: 10 },
+  botaoEntrar: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 9, marginTop: 12, padding: 14 },
   botaoDesativado: { opacity: 0.55 },
   botaoPressionado: { opacity: 0.8 },
-  textoBotao: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '700' },
   linkRecuperacao: { alignItems: 'center', padding: 14 },
-  fundoModal: { alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.55)', flex: 1, justifyContent: 'center', padding: 22 },
-  cartaoModal: { backgroundColor: '#fff', borderRadius: 16, maxWidth: 430, padding: 22, width: '100%' },
-  tituloModal: { color: '#123b4a', fontSize: 20, fontWeight: '700' },
-  subtituloModal: { color: '#526168', fontSize: 14, marginTop: 6 },
+  fundoModal: { alignItems: 'center', backgroundColor: cores.fundoModal, flex: 1, justifyContent: 'center', padding: 22 },
+  cartaoModal: { backgroundColor: cores.branco, borderRadius: 16, maxWidth: 430, padding: 22, width: '100%' },
+  tituloModal: { color: cores.azulEscuro, fontSize: 20, fontWeight: '700' },
+  subtituloModal: { color: cores.textoSecundario, fontSize: 14, marginTop: 6 },
 });

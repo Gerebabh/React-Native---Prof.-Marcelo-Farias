@@ -50,6 +50,7 @@ if (firebaseConfigurado) {
     auth = getAuth(aplicativo);
   }
 
+  auth.languageCode = 'pt-BR';
   banco = getFirestore(aplicativo);
   funcoes = getFunctions(aplicativo, 'southamerica-east1');
 }
