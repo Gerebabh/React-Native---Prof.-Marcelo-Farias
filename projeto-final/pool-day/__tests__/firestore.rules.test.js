@@ -100,6 +100,7 @@ describe('regras de acesso por empresa e papel', () => {
   test('permite o perfil do próprio usuário e bloqueia o perfil de outra pessoa', async () => {
     const banco = firestoreDo(usuarioTratadorA);
     await assertSucceeds(getDoc(doc(banco, 'usuarios/tratador-a')));
+    await assertSucceeds(getDoc(doc(banco, caminhoEmpresa(empresaA, 'membros', usuarioTratadorA))));
     await assertFails(getDoc(doc(banco, 'usuarios/responsavel-b')));
   });
 
@@ -120,6 +121,15 @@ describe('regras de acesso por empresa e papel', () => {
     await assertSucceeds(deleteDoc(cliente));
     await assertSucceeds(getDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'))));
     await assertSucceeds(setDoc(visita, { tratadorUid: usuarioTratadorA, status: 'Pendente' }));
+  });
+
+  test('responsável pode listar a equipe, mas tratador não pode consultar outros membros', async () => {
+    const equipe = collection(firestoreDo(usuarioResponsavelA), `empresas/${empresaA}/membros`);
+    const resultado = await assertSucceeds(getDocs(equipe));
+    expect(resultado.size).toBe(4);
+
+    const equipeDoTratador = collection(firestoreDo(usuarioTratadorA), `empresas/${empresaA}/membros`);
+    await assertFails(getDocs(equipeDoTratador));
   });
 
   test('tratador consulta cadastros da empresa, mas não pode alterá-los', async () => {

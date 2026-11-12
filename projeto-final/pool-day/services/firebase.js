@@ -9,7 +9,19 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getFirestore,
+  onSnapshot,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const configuracao = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -24,6 +36,7 @@ export const firebaseConfigurado = Boolean(configuracao.apiKey && configuracao.p
 
 let auth = null;
 let banco = null;
+let funcoes = null;
 
 if (firebaseConfigurado) {
   const aplicativo = getApps().length ? getApp() : initializeApp(configuracao);
@@ -38,6 +51,7 @@ if (firebaseConfigurado) {
   }
 
   banco = getFirestore(aplicativo);
+  funcoes = getFunctions(aplicativo, 'southamerica-east1');
 }
 
 function verificarConfiguracao() {
@@ -67,6 +81,95 @@ export async function sair() {
 export async function enviarRecuperacaoSenha(email) {
   verificarConfiguracao();
   await sendPasswordResetEmail(auth, email);
+}
+
+export async function convidarTratador(nome, email) {
+  verificarConfiguracao();
+  const resultado = await httpsCallable(funcoes, 'convidarTratador')({ nome, email });
+
+  try {
+    await sendPasswordResetEmail(auth, resultado.data.email);
+  } catch (erro) {
+    erro.conviteCriado = true;
+    throw erro;
+  }
+
+  return resultado.data;
+}
+
+export function observarTratadores(empresaId, aoAtualizar, aoErro) {
+  verificarConfiguracao();
+  const referencia = query(
+    collection(banco, 'empresas', empresaId, 'membros'),
+    where('papel', '==', 'tratador')
+  );
+  return onSnapshot(referencia, (snapshot) => {
+    aoAtualizar(snapshot.docs
+      .map((documento) => ({ id: documento.id, ...documento.data() }))
+      .filter((membro) => membro.ativo === true));
+  }, aoErro);
+}
+
+export function observarPiscinas(empresaId, aoAtualizar, aoErro) {
+  verificarConfiguracao();
+  const referencia = collection(banco, 'empresas', empresaId, 'piscinas');
+  return onSnapshot(referencia, (snapshot) => {
+    aoAtualizar(snapshot.docs.map((documento) => ({ id: documento.id, ...documento.data() })));
+  }, aoErro);
+}
+
+export function observarVisitas(empresaId, usuarioId, papel, aoAtualizar, aoErro) {
+  verificarConfiguracao();
+  const referencia = collection(banco, 'empresas', empresaId, 'visitas');
+  const consulta = papel === 'tratador'
+    ? query(referencia, where('tratadorUid', '==', usuarioId))
+    : referencia;
+  return onSnapshot(consulta, (snapshot) => {
+    aoAtualizar(snapshot.docs.map((documento) => ({ id: documento.id, ...documento.data() })));
+  }, aoErro);
+}
+
+export async function salvarPiscina(empresaId, usuarioId, dados) {
+  verificarConfiguracao();
+  const lote = writeBatch(banco);
+  const cliente = doc(collection(banco, 'empresas', empresaId, 'clientes'));
+  const local = doc(collection(banco, 'empresas', empresaId, 'locais'));
+  const piscina = doc(collection(banco, 'empresas', empresaId, 'piscinas'));
+
+  lote.set(cliente, {
+    nome: dados.cliente,
+    criadaPorUid: usuarioId,
+    criadaEm: new Date().toISOString(),
+  });
+  lote.set(local, {
+    clienteId: cliente.id,
+    cliente: dados.cliente,
+    endereco: dados.endereco,
+    criadaPorUid: usuarioId,
+  });
+  lote.set(piscina, {
+    localId: local.id,
+    clienteId: cliente.id,
+    cliente: dados.cliente,
+    endereco: dados.endereco,
+    tipoPiscina: dados.tipoPiscina,
+    litragem: dados.litragem,
+    criadaPorUid: usuarioId,
+  });
+
+  await lote.commit();
+  return { id: piscina.id, localId: local.id, clienteId: cliente.id, ...dados };
+}
+
+export async function salvarVisita(empresaId, dados) {
+  verificarConfiguracao();
+  const referencia = await addDoc(collection(banco, 'empresas', empresaId, 'visitas'), dados);
+  return referencia.id;
+}
+
+export async function atualizarVisita(empresaId, visitaId, dados) {
+  verificarConfiguracao();
+  await updateDoc(doc(banco, 'empresas', empresaId, 'visitas', visitaId), dados);
 }
 
 export async function buscarPerfil(usuarioId) {

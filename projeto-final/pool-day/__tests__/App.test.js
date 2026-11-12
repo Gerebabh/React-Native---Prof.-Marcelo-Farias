@@ -2,13 +2,31 @@ import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as Firebase from '../services/firebase';
 import App from '../App';
+
+const mockSessao = { papel: 'responsavel' };
+
+jest.mock('../services/firebase', () => ({
+  atualizarVisita: jest.fn(async () => {}),
+  convidarTratador: jest.fn(async () => ({})),
+  observarPiscinas: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
+  observarTratadores: jest.fn((_empresaId, aoAtualizar) => {
+    aoAtualizar([{ id: 'tratador-1', nome: 'Joana', email: 'joana@poolday.com' }]);
+    return jest.fn();
+  }),
+  observarVisitas: jest.fn(() => jest.fn()),
+  salvarPiscina: jest.fn(async (_empresaId, _usuarioId, dados) => ({
+    id: 'piscina-1', localId: 'local-1', clienteId: 'cliente-1', ...dados,
+  })),
+  salvarVisita: jest.fn(async () => 'visita-cloud-1'),
+}));
 
 jest.mock('../components/Autenticacao', () => {
   return function AutenticacaoTeste({ children }) {
     return children({
       usuario: { uid: 'usuario-teste', email: 'teste@poolday.com' },
-      perfil: { empresaId: 'empresa-teste', nome: 'Pessoa Teste', nomeEmpresa: 'Pool Day Teste', papel: 'responsavel' },
+      perfil: { empresaId: 'empresa-teste', nome: 'Pessoa Teste', nomeEmpresa: 'Pool Day Teste', papel: mockSessao.papel },
       aoSair: jest.fn(),
     });
   };
@@ -43,7 +61,7 @@ jest.mock('@react-native-community/datetimepicker', () => {
   const { Text, View } = require('react-native');
   return function SeletorData({ onValueChange }) {
     return React.createElement(View, null,
-      React.createElement(Text, { onPress: () => onValueChange({ type: 'set' }, new Date(2026, 10, 10)) }, 'Selecionar no calendário'),
+      React.createElement(Text, { onPress: () => { const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); onValueChange({ type: 'set' }, amanha); } }, 'Selecionar no calendário'),
       React.createElement(Text, { onPress: () => { const ontem = new Date(); ontem.setDate(ontem.getDate() - 1); onValueChange({ type: 'set' }, ontem); } }, 'Selecionar data passada')
     );
   };
@@ -64,6 +82,7 @@ describe('cadastro de cliente e visitas', () => {
   let alerta;
 
   beforeEach(() => {
+    mockSessao.papel = 'responsavel';
     alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     Location.hasServicesEnabledAsync.mockResolvedValue(true);
     Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
@@ -75,6 +94,7 @@ describe('cadastro de cliente e visitas', () => {
     ImagePicker.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
     ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
     ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
+    Firebase.convidarTratador.mockResolvedValue({ uid: 'novo-tratador' });
   });
   afterEach(() => {
     alerta.mockRestore();
@@ -88,6 +108,10 @@ describe('cadastro de cliente e visitas', () => {
     if (piscina) await fireEvent.press(getByText('Fibra'));
     await fireEvent.changeText(getByPlaceholderText('Litragem em litros (ex.: 13000)'), litragem);
     await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
+    const volumeValido = Number.isInteger(Number(litragem.trim())) && Number(litragem.trim()) > 0;
+    if (cliente.trim() && endereco.trim() && piscina && volumeValido) {
+      await waitFor(() => expect(Firebase.salvarPiscina).toHaveBeenCalled());
+    }
   }
 
   test('mostra o nome do aplicativo', async () => {
@@ -122,6 +146,29 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Piscina de Fibra • 13000 L')).toBeTruthy();
   });
 
+  test('responsável consegue convidar tratador pelo nome e e-mail', async () => {
+    const tela = await render(<App />);
+    await fireEvent.changeText(tela.getByPlaceholderText('Nome do tratador'), 'Joana Lima');
+    await fireEvent.changeText(tela.getByPlaceholderText('E-mail do tratador'), 'joana@poolday.com');
+    await fireEvent.press(tela.getByRole('button', { name: 'Convidar tratador' }));
+
+    await waitFor(() => expect(Firebase.convidarTratador).toHaveBeenCalledWith('Joana Lima', 'joana@poolday.com'));
+    expect(tela.getByText('Joana • joana@poolday.com')).toBeTruthy();
+  });
+
+  test('tratador não vê os formulários de cadastro e convite da equipe', async () => {
+    mockSessao.papel = 'tratador';
+    const tela = await render(<App visitasIniciais={[]} />);
+
+    expect(tela.getByText('Minhas visitas')).toBeTruthy();
+    expect(tela.queryByText('Dados do local')).toBeNull();
+    expect(tela.queryByText('Equipe de tratadores')).toBeNull();
+    expect(tela.queryByRole('button', { name: 'Adicionar visita' })).toBeNull();
+    expect(Firebase.observarVisitas).toHaveBeenCalledWith(
+      'empresa-teste', 'usuario-teste', 'tratador', expect.any(Function), expect.any(Function)
+    );
+  });
+
   test('cadastra visita com data, local e serviço selecionados', async () => {
     const tela = await render(<App />);
     await preencherLocal(tela);
@@ -131,8 +178,15 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByText('Aplicar produtos'));
     await fireEvent.changeText(tela.getByPlaceholderText('Orientação de produtos'), 'Aplicar cloro após a medição.');
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+    await waitFor(() => expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy());
+    expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
+      tratadorUid: 'tratador-1', criadaPorUid: 'usuario-teste',
+    }));
 
-    expect(tela.getByText('10/11/2026')).toBeTruthy();
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    const dataEsperada = `${String(amanha.getDate()).padStart(2, '0')}/${String(amanha.getMonth() + 1).padStart(2, '0')}/${amanha.getFullYear()}`;
+    expect(tela.getByText(dataEsperada)).toBeTruthy();
     expect(tela.getAllByText('Casa da família — Rua das Flores, 10')).toHaveLength(2);
     expect(tela.getAllByText('Aplicar produtos')).toHaveLength(2);
     expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy();
@@ -287,7 +341,7 @@ describe('cadastro de cliente e visitas', () => {
 
     await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
 
-    expect(tela.getByText(/Horário de saída:/)).toBeTruthy();
+    await waitFor(() => expect(tela.getByText(/Horário de saída:/)).toBeTruthy());
     expect(tela.queryByRole('button', { name: 'Registrar saída' })).toBeNull();
   });
 
@@ -312,7 +366,7 @@ describe('cadastro de cliente e visitas', () => {
 
     await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
 
-    expect(tela.getByText(/Horário de saída:/)).toBeTruthy();
+    await waitFor(() => expect(tela.getByText(/Horário de saída:/)).toBeTruthy());
     expect(alerta).not.toHaveBeenCalled();
   });
 
