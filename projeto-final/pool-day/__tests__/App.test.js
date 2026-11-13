@@ -1,11 +1,21 @@
 import { Alert } from 'react-native';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent as eventos, render, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as Firebase from '../services/firebase';
 import App from '../App';
 
 const mockSessao = { papel: 'responsavel' };
+
+// Envolve os eventos em act; waitFor aguarda as atualizações assíncronas do app.
+const fireEvent = {
+  press: async (...argumentos) => {
+    await act(async () => eventos.press(...argumentos));
+  },
+  changeText: async (...argumentos) => {
+    await act(async () => eventos.changeText(...argumentos));
+  },
+};
 
 jest.mock('../services/firebase', () => ({
   atualizarVisita: jest.fn(async () => {}),
@@ -98,7 +108,9 @@ describe('cadastro de cliente e visitas', () => {
     Firebase.convidarTratador.mockResolvedValue({ uid: 'novo-tratador' });
     Firebase.enviarRecuperacaoSenha.mockResolvedValue(undefined);
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Aguarda a atualização em lote da FlatList enquanto a tela ainda está montada.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 60)));
     alerta.mockRestore();
     jest.clearAllMocks();
   });
@@ -343,9 +355,7 @@ describe('cadastro de cliente e visitas', () => {
       status: 'Pendente',
     }]} />);
 
-    await act(async () => {
-      await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
-    });
+    await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
 
     await waitFor(() => {
       expect(tela.getByText(/Horário de chegada:/)).toBeTruthy();
@@ -442,9 +452,7 @@ describe('cadastro de cliente e visitas', () => {
       id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
     }]} />);
 
-    await act(async () => {
-      await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
-    });
+    await fireEvent.press(tela.getByRole('button', { name: 'Estou aqui' }));
 
     await waitFor(() => expect(tela.getByText('Endereço da chegada: -15.79, -47.88')).toBeTruthy());
   });
