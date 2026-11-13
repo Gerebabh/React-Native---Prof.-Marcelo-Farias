@@ -71,6 +71,8 @@ O login usa Firebase Authentication e busca o perfil em `usuarios/{uid}`, a asso
 
 O responsável cria o convite pela tela Equipe. O app cria a conta em uma instância separada e temporária do Firebase Authentication, grava em lote o perfil `usuarios/{uid}` e o vínculo `empresas/{empresaId}/membros/{uid}`, e envia um e-mail do Firebase para definir a senha. A sessão separada evita desconectar o responsável durante o cadastro. As regras do Firestore permitem a gravação apenas quando o responsável está ativo na empresa.
 
+Uma pessoa que ainda não tem conta pode usar **Cadastre-se** na tela inicial. O app cria a conta em uma sessão temporária, grava juntos o perfil, a nova empresa e o primeiro membro com papel `responsavel`, e só então inicia a sessão normal. As regras permitem esse lote apenas para o usuário autenticado que está criando uma empresa nova para si; o cadastro não pode vincular uma conta a uma empresa existente.
+
 ## Conferências para as próximas etapas
 
 - Um usuário da empresa A não pode consultar os registros da empresa B.

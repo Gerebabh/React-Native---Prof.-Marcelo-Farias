@@ -195,6 +195,44 @@ describe('regras de acesso por empresa e papel', () => {
     await assertSucceeds(lote.commit());
   });
 
+  test('novo responsável cria a empresa, o perfil e o próprio vínculo no mesmo lote', async () => {
+    const novoResponsavel = 'responsavel-novo';
+    const empresaNova = 'empresa-nova';
+    const banco = firestoreDo(novoResponsavel);
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, `usuarios/${novoResponsavel}`), {
+      empresaId: empresaNova, nome: 'Ana Silva', email: 'ana@poolday.com',
+    });
+    lote.set(doc(banco, `empresas/${empresaNova}`), {
+      nome: 'Pool Day Brasília', responsavelUid: novoResponsavel, criadaEm: '2026-11-13T12:00:00.000Z',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaNova, 'membros', novoResponsavel)), {
+      nome: 'Ana Silva', email: 'ana@poolday.com', papel: 'responsavel', ativo: true, criadoEm: '2026-11-13T12:00:00.000Z',
+    });
+
+    await assertSucceeds(lote.commit());
+  });
+
+  test('não permite vincular um responsável existente a uma nova empresa', async () => {
+    const banco = firestoreDo(usuarioResponsavelA);
+    const empresaNova = 'empresa-invasora';
+    const lote = writeBatch(banco);
+
+    lote.set(doc(banco, 'usuarios/responsavel-a'), {
+      empresaId: empresaNova, nome: 'Responsável A', email: 'responsavel-a@poolday.com',
+    });
+    lote.set(doc(banco, `empresas/${empresaNova}`), {
+      nome: 'Empresa indevida', responsavelUid: usuarioResponsavelA, criadaEm: '2026-11-13T12:00:00.000Z',
+    });
+    lote.set(doc(banco, caminhoEmpresa(empresaNova, 'membros', usuarioResponsavelA)), {
+      nome: 'Responsável A', email: 'responsavel-a@poolday.com', papel: 'responsavel', ativo: true,
+      criadoEm: '2026-11-13T12:00:00.000Z',
+    });
+
+    await assertFails(lote.commit());
+  });
+
   test('tratador não pode criar outro vínculo de membro', async () => {
     const banco = firestoreDo(usuarioTratadorA);
     const novoUsuario = 'tratador-bloqueado';

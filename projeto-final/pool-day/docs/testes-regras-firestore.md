@@ -13,6 +13,9 @@ Use dois usuários autenticados, cada um com empresa e documento de membro ativo
 | Usuário A consultar o perfil `usuarios/{uidB}` | Negado |
 | Membro ativo consultar a própria empresa e o próprio documento de membro | Permitido |
 | Usuário A consultar dados da empresa B | Negado |
+| Novo responsável criar perfil, empresa e próprio vínculo no mesmo lote | Permitido |
+| Criar cadastro sem os três documentos vinculados ou com UID diferente | Negado |
+| Vincular um perfil já existente a outra empresa | Negado |
 | Responsável consultar e alterar clientes, locais, piscinas e visitas da própria empresa | Permitido |
 | Tratador consultar clientes, locais e piscinas da própria empresa | Permitido |
 | Tratador criar ou excluir cliente, local, piscina ou visita | Negado |

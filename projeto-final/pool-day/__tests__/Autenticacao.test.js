@@ -9,10 +9,13 @@ jest.mock('../services/firebase', () => ({
   entrar: jest.fn(),
   sair: jest.fn(),
   enviarRecuperacaoSenha: jest.fn(),
+  registrarResponsavel: jest.fn(),
   buscarPerfil: jest.fn(),
-  mensagemErroAutenticacao: jest.fn((erro) => erro?.code === 'auth/invalid-credential'
-    ? 'E-mail ou senha incorretos.'
-    : 'Não foi possível acessar a conta. Tente novamente.'),
+  mensagemErroAutenticacao: jest.fn((erro) => {
+    if (erro?.code === 'auth/invalid-credential') return 'E-mail ou senha incorretos.';
+    if (erro?.code === 'auth/email-already-in-use') return 'Este e-mail já está cadastrado. Tente entrar ou recuperar a senha.';
+    return 'Não foi possível acessar a conta. Tente novamente.';
+  }),
 }));
 
 describe('autenticação', () => {
@@ -106,6 +109,54 @@ describe('autenticação', () => {
     await pressionar(tela, 'Entrar');
 
     await waitFor(() => expect(tela.getByText('E-mail ou senha incorretos.')).toBeTruthy());
+  });
+
+  test('permite criar a conta do responsável com os dados da empresa', async () => {
+    Firebase.registrarResponsavel.mockImplementation(async (nome, email) => {
+      atualizarUsuario({ uid: 'responsavel-novo', email });
+      return { uid: 'responsavel-novo', email };
+    });
+    Firebase.buscarPerfil.mockResolvedValue({
+      empresaId: 'empresa-nova', nome: 'Ana Silva', papel: 'responsavel', nomeEmpresa: 'Pool Day Brasília',
+    });
+    const tela = renderizarApp();
+
+    await pressionar(tela, 'Cadastre-se');
+    await fireEvent.changeText(tela.getByLabelText('Nome do responsável'), 'Ana Silva');
+    await fireEvent.changeText(tela.getByLabelText('Nome da empresa'), 'Pool Day Brasília');
+    await fireEvent.changeText(tela.getByLabelText('E-mail'), 'ana@poolday.com');
+    await fireEvent.changeText(tela.getByLabelText('Senha'), 'senha-segura');
+    await pressionar(tela, 'Criar conta');
+
+    await waitFor(() => expect(Firebase.registrarResponsavel).toHaveBeenCalledWith(
+      'Ana Silva', 'ana@poolday.com', 'senha-segura', 'Pool Day Brasília'
+    ));
+    await waitFor(() => expect(tela.getByText('Olá Ana Silva (responsavel)')).toBeTruthy());
+    expect(tela.getByText('Pool Day Brasília')).toBeTruthy();
+  });
+
+  test('não envia cadastro do responsável com campos vazios', async () => {
+    const tela = renderizarApp();
+
+    await pressionar(tela, 'Cadastre-se');
+    await pressionar(tela, 'Criar conta');
+
+    expect(tela.getByText('Preencha todos os campos para criar sua conta e empresa.')).toBeTruthy();
+    expect(Firebase.registrarResponsavel).not.toHaveBeenCalled();
+  });
+
+  test('mostra uma mensagem amigável quando o e-mail de cadastro já existe', async () => {
+    Firebase.registrarResponsavel.mockRejectedValue({ code: 'auth/email-already-in-use' });
+    const tela = renderizarApp();
+
+    await pressionar(tela, 'Cadastre-se');
+    await fireEvent.changeText(tela.getByLabelText('Nome do responsável'), 'Ana Silva');
+    await fireEvent.changeText(tela.getByLabelText('Nome da empresa'), 'Pool Day Brasília');
+    await fireEvent.changeText(tela.getByLabelText('E-mail'), 'ana@poolday.com');
+    await fireEvent.changeText(tela.getByLabelText('Senha'), 'senha-segura');
+    await pressionar(tela, 'Criar conta');
+
+    await waitFor(() => expect(tela.getByText('Este e-mail já está cadastrado. Tente entrar ou recuperar a senha.')).toBeTruthy());
   });
 
   test('valida o e-mail e a senha antes de chamar o Firebase', async () => {

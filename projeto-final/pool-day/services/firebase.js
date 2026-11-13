@@ -40,6 +40,7 @@ export const firebaseConfigurado = Boolean(configuracao.apiKey && configuracao.p
 let auth = null;
 let authConvites = null;
 let banco = null;
+let bancoConvites = null;
 
 if (firebaseConfigurado) {
   const aplicativo = getApps().length ? getApp() : initializeApp(configuracao);
@@ -66,10 +67,11 @@ if (firebaseConfigurado) {
   authConvites.languageCode = 'pt-BR';
 
   banco = getFirestore(aplicativo);
+  bancoConvites = getFirestore(aplicativoConvites);
 }
 
 function verificarConfiguracao() {
-  if (!firebaseConfigurado || !auth || !authConvites || !banco) {
+  if (!firebaseConfigurado || !auth || !authConvites || !banco || !bancoConvites) {
     const erro = new Error('Configure o Firebase antes de usar a autenticação.');
     erro.code = 'firebase/configuration-not-found';
     throw erro;
@@ -95,6 +97,98 @@ export async function sair() {
 export async function enviarRecuperacaoSenha(email) {
   verificarConfiguracao();
   await sendPasswordResetEmail(auth, email);
+}
+
+export async function registrarResponsavel(nome, email, senha, nomeEmpresa) {
+  verificarConfiguracao();
+  const nomeResponsavel = typeof nome === 'string' ? nome.trim() : '';
+  const emailResponsavel = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const senhaResponsavel = typeof senha === 'string' ? senha : '';
+  const empresa = typeof nomeEmpresa === 'string' ? nomeEmpresa.trim() : '';
+
+  if (!nomeResponsavel || !emailResponsavel || !senhaResponsavel || !empresa) {
+    const erro = new Error('Preencha todos os campos para criar sua conta e empresa.');
+    erro.code = 'auth/missing-fields';
+    throw erro;
+  }
+
+  if (!/^\S+@\S+\.\S+$/.test(emailResponsavel)) {
+    const erro = new Error('Informe um e-mail válido.');
+    erro.code = 'auth/invalid-email';
+    throw erro;
+  }
+
+  if (nomeResponsavel.length > 100 || empresa.length > 100 || emailResponsavel.length > 254) {
+    const erro = new Error('Confira o tamanho do nome, do e-mail e do nome da empresa.');
+    erro.code = 'auth/invalid-argument';
+    throw erro;
+  }
+
+  if (senhaResponsavel.length < 6) {
+    const erro = new Error('A senha precisa ter pelo menos 6 caracteres.');
+    erro.code = 'auth/weak-password';
+    throw erro;
+  }
+
+  let usuarioCriado = null;
+
+  try {
+    const resultado = await createUserWithEmailAndPassword(authConvites, emailResponsavel, senhaResponsavel);
+    usuarioCriado = resultado.user;
+
+    try {
+      const empresaRef = doc(collection(bancoConvites, 'empresas'));
+      const empresaId = empresaRef.id;
+      const dataCriacao = new Date().toISOString();
+      const lote = writeBatch(bancoConvites);
+
+      lote.set(doc(bancoConvites, 'usuarios', usuarioCriado.uid), {
+        empresaId,
+        nome: nomeResponsavel,
+        email: emailResponsavel,
+      });
+      lote.set(empresaRef, {
+        nome: empresa,
+        responsavelUid: usuarioCriado.uid,
+        criadaEm: dataCriacao,
+      });
+      lote.set(doc(bancoConvites, 'empresas', empresaId, 'membros', usuarioCriado.uid), {
+        nome: nomeResponsavel,
+        email: emailResponsavel,
+        papel: 'responsavel',
+        ativo: true,
+        criadoEm: dataCriacao,
+      });
+
+      await lote.commit();
+    } catch (erro) {
+      try {
+        await deleteUser(usuarioCriado);
+      } catch (_erroAoRemoverConta) {
+        erro.contaSemVinculo = true;
+        erro.email = emailResponsavel;
+      }
+      throw erro;
+    }
+
+    try {
+      await signOut(authConvites);
+      const sessao = await signInWithEmailAndPassword(auth, emailResponsavel, senhaResponsavel);
+      return sessao.user;
+    } catch (erro) {
+      erro.cadastroConcluido = true;
+      erro.email = emailResponsavel;
+      throw erro;
+    }
+  } finally {
+    if (usuarioCriado) {
+      try {
+        await signOut(authConvites);
+      } catch (_erroAoEncerrarSessaoTemporaria) {
+        // A sessão temporária só é usada para concluir o cadastro sem trocar o login atual.
+      }
+    }
+  }
 }
 
 async function gerarSenhaTemporaria() {
@@ -288,6 +382,10 @@ export function mensagemErroAutenticacao(erro) {
   const mensagens = {
     'firebase/configuration-not-found': 'A autenticação ainda não foi configurada. Confira as instruções do projeto.',
     'auth/invalid-email': 'Informe um e-mail válido.',
+    'auth/missing-fields': 'Preencha todos os campos para criar sua conta e empresa.',
+    'auth/invalid-argument': 'Confira o tamanho do nome, do e-mail e do nome da empresa.',
+    'auth/email-already-in-use': 'Este e-mail já está cadastrado. Tente entrar ou recuperar a senha.',
+    'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
     'auth/invalid-credential': 'E-mail ou senha incorretos.',
     'auth/user-not-found': 'E-mail ou senha incorretos.',
     'auth/wrong-password': 'E-mail ou senha incorretos.',
