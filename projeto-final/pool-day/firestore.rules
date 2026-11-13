@@ -9,6 +9,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/empresas/$(empresaId)/membros/$(usuarioId);
     }
 
+    function caminhoEmpresa(empresaId) {
+      return /databases/$(database)/documents/empresas/$(empresaId);
+    }
+
     function caminhoUsuario(usuarioId) {
       return /databases/$(database)/documents/usuarios/$(usuarioId);
     }
@@ -49,6 +53,69 @@ service cloud.firestore {
         && getAfter(caminhoMembro(empresaId, usuarioId)).data.email == request.resource.data.email;
     }
 
+    function criarPerfilDoResponsavel(empresaId, usuarioId) {
+      return autenticado()
+        && usuarioId == request.auth.uid
+        && request.resource.data.keys().hasAll(['empresaId', 'nome', 'email'])
+        && request.resource.data.keys().hasOnly(['empresaId', 'nome', 'email'])
+        && request.resource.data.empresaId == empresaId
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.email.size() <= 254
+        && !exists(caminhoEmpresa(empresaId))
+        && existsAfter(caminhoEmpresa(empresaId))
+        && getAfter(caminhoEmpresa(empresaId)).data.responsavelUid == usuarioId
+        && existsAfter(caminhoMembro(empresaId, usuarioId))
+        && getAfter(caminhoMembro(empresaId, usuarioId)).data.papel == 'responsavel'
+        && getAfter(caminhoMembro(empresaId, usuarioId)).data.ativo == true
+        && getAfter(caminhoMembro(empresaId, usuarioId)).data.nome == request.resource.data.nome
+        && getAfter(caminhoMembro(empresaId, usuarioId)).data.email == request.resource.data.email;
+    }
+
+    function criarEmpresaResponsavel(empresaId) {
+      return autenticado()
+        && request.resource.data.keys().hasAll(['nome', 'responsavelUid', 'criadaEm'])
+        && request.resource.data.keys().hasOnly(['nome', 'responsavelUid', 'criadaEm'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100
+        && request.resource.data.responsavelUid == request.auth.uid
+        && request.resource.data.criadaEm is string
+        && existsAfter(caminhoUsuario(request.auth.uid))
+        && getAfter(caminhoUsuario(request.auth.uid)).data.empresaId == empresaId
+        && existsAfter(caminhoMembro(empresaId, request.auth.uid))
+        && getAfter(caminhoMembro(empresaId, request.auth.uid)).data.papel == 'responsavel'
+        && getAfter(caminhoMembro(empresaId, request.auth.uid)).data.ativo == true
+        && getAfter(caminhoMembro(empresaId, request.auth.uid)).data.nome == getAfter(caminhoUsuario(request.auth.uid)).data.nome
+        && getAfter(caminhoMembro(empresaId, request.auth.uid)).data.email == getAfter(caminhoUsuario(request.auth.uid)).data.email;
+    }
+
+    function criarVinculoDoResponsavel(empresaId, membroId) {
+      return autenticado()
+        && membroId == request.auth.uid
+        && request.resource.data.keys().hasAll(['nome', 'email', 'papel', 'ativo', 'criadoEm'])
+        && request.resource.data.keys().hasOnly(['nome', 'email', 'papel', 'ativo', 'criadoEm'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.papel == 'responsavel'
+        && request.resource.data.ativo == true
+        && request.resource.data.criadoEm is string
+        && !exists(caminhoEmpresa(empresaId))
+        && existsAfter(caminhoEmpresa(empresaId))
+        && getAfter(caminhoEmpresa(empresaId)).data.responsavelUid == membroId
+        && existsAfter(caminhoUsuario(membroId))
+        && getAfter(caminhoUsuario(membroId)).data.empresaId == empresaId
+        && getAfter(caminhoUsuario(membroId)).data.nome == request.resource.data.nome
+        && getAfter(caminhoUsuario(membroId)).data.email == request.resource.data.email;
+    }
+
     function criarVinculoDoTratador(empresaId, membroId) {
       return responsavel(empresaId)
         && membroId != request.auth.uid
@@ -71,19 +138,22 @@ service cloud.firestore {
 
     match /usuarios/{usuarioId} {
       allow get: if autenticado() && request.auth.uid == usuarioId;
-      allow create: if criarPerfilDoTratador(request.resource.data.empresaId, usuarioId);
+      allow create: if criarPerfilDoTratador(request.resource.data.empresaId, usuarioId)
+        || criarPerfilDoResponsavel(request.resource.data.empresaId, usuarioId);
       allow list, update, delete: if false;
     }
 
     match /empresas/{empresaId} {
       allow get: if membroAtivo(empresaId);
-      allow list, create, update, delete: if false;
+      allow create: if criarEmpresaResponsavel(empresaId);
+      allow list, update, delete: if false;
 
       match /membros/{membroId} {
         allow get: if (autenticado() && request.auth.uid == membroId && membroAtivo(empresaId))
           || responsavel(empresaId);
         allow list: if responsavel(empresaId);
-        allow create: if criarVinculoDoTratador(empresaId, membroId);
+        allow create: if criarVinculoDoTratador(empresaId, membroId)
+          || criarVinculoDoResponsavel(empresaId, membroId);
         allow update, delete: if false;
       }
 

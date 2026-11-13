@@ -22,14 +22,17 @@ jest.mock('firebase/auth', () => ({
   initializeAuth: jest.fn((app) => ({ nome: app.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' })),
   onAuthStateChanged: jest.fn(),
   sendPasswordResetEmail: jest.fn(async () => {}),
-  signInWithEmailAndPassword: jest.fn(),
+  signInWithEmailAndPassword: jest.fn(async (_auth, email) => ({ user: { uid: 'tratador-1', email } })),
   signOut: jest.fn(async () => {}),
 }));
 
 jest.mock('firebase/firestore', () => ({
-  doc: jest.fn((_banco, ...partes) => partes.join('/')),
+  collection: jest.fn((_banco, ...partes) => partes.join('/')),
+  doc: jest.fn((_banco, ...partes) => partes.length
+    ? partes.join('/')
+    : { id: 'empresa-nova', path: 'empresas/empresa-nova' }),
   getDoc: jest.fn(),
-  getFirestore: jest.fn(() => ({ nome: 'banco-teste' })),
+  getFirestore: jest.fn((app) => ({ nome: app?.name === 'pool-day-convites' ? 'banco-convites' : 'banco-teste' })),
   writeBatch: jest.fn(() => ({ set: jest.fn(), commit: jest.fn(async () => {}) })),
 }));
 
@@ -124,6 +127,59 @@ describe('serviço Firebase', () => {
       { nome: 'auth-teste', languageCode: 'pt-BR' }, 'joana@poolday.com'
     );
     expect(authSdk.signOut).toHaveBeenCalledWith({ nome: 'auth-convite-teste', languageCode: 'pt-BR' });
+  });
+
+  test('cadastra responsável, empresa e vínculo antes de iniciar a sessão principal', async () => {
+    const { firebase, authSdk, firestore } = carregarFirebase();
+
+    await expect(firebase.registrarResponsavel('  Ana Silva  ', ' ANA@POOLDay.com ', 'senha-forte', '  Pool Day Brasília  ')).resolves.toEqual({
+      uid: 'tratador-1', email: 'ana@poolday.com',
+    });
+
+    expect(authSdk.createUserWithEmailAndPassword).toHaveBeenCalledWith(
+      { nome: 'auth-convite-teste', languageCode: 'pt-BR' }, 'ana@poolday.com', 'senha-forte'
+    );
+    const lote = firestore.writeBatch.mock.results[0].value;
+    expect(firestore.writeBatch).toHaveBeenCalledWith({ nome: 'banco-convites' });
+    expect(lote.set).toHaveBeenNthCalledWith(1, 'usuarios/tratador-1', {
+      empresaId: 'empresa-nova', nome: 'Ana Silva', email: 'ana@poolday.com',
+    });
+    expect(lote.set).toHaveBeenNthCalledWith(2, { id: 'empresa-nova', path: 'empresas/empresa-nova' }, {
+      nome: 'Pool Day Brasília', responsavelUid: 'tratador-1', criadaEm: expect.any(String),
+    });
+    expect(lote.set).toHaveBeenNthCalledWith(3, 'empresas/empresa-nova/membros/tratador-1', {
+      nome: 'Ana Silva', email: 'ana@poolday.com', papel: 'responsavel', ativo: true, criadoEm: expect.any(String),
+    });
+    expect(lote.commit).toHaveBeenCalled();
+    expect(authSdk.signOut).toHaveBeenCalledWith({ nome: 'auth-convite-teste', languageCode: 'pt-BR' });
+    expect(authSdk.signInWithEmailAndPassword).toHaveBeenCalledWith(
+      { nome: 'auth-teste', languageCode: 'pt-BR' }, 'ana@poolday.com', 'senha-forte'
+    );
+  });
+
+  test('remove a conta temporária se não conseguir criar empresa e vínculo', async () => {
+    const { firebase, authSdk, firestore } = carregarFirebase();
+    const erro = Object.assign(new Error('Permissão negada.'), { code: 'permission-denied' });
+    firestore.writeBatch.mockReturnValueOnce({ set: jest.fn(), commit: jest.fn(async () => { throw erro; }) });
+
+    await expect(firebase.registrarResponsavel('Ana', 'ana@poolday.com', 'senha-forte', 'Pool Day')).rejects.toBe(erro);
+    expect(authSdk.deleteUser).toHaveBeenCalledWith({ uid: 'tratador-1', email: 'ana@poolday.com' });
+    expect(authSdk.signInWithEmailAndPassword).not.toHaveBeenCalled();
+  });
+
+  test('valida os campos do cadastro antes de criar a conta', async () => {
+    const { firebase, authSdk } = carregarFirebase();
+
+    await expect(firebase.registrarResponsavel('', 'email-inválido', '123', '')).rejects.toMatchObject({
+      code: 'auth/missing-fields',
+    });
+    await expect(firebase.registrarResponsavel('Ana', 'email-inválido', 'senha-segura', 'Pool Day')).rejects.toMatchObject({
+      code: 'auth/invalid-email',
+    });
+    await expect(firebase.registrarResponsavel('Ana', 'ana@poolday.com', '123', 'Pool Day')).rejects.toMatchObject({
+      code: 'auth/weak-password',
+    });
+    expect(authSdk.createUserWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
   test('não grava vínculo nem envia e-mail se o endereço já estiver cadastrado', async () => {

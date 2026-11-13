@@ -24,6 +24,7 @@ import {
   firebaseConfigurado,
   mensagemErroAutenticacao,
   observarEstadoAuth,
+  registrarResponsavel,
   sair,
 } from '../services/firebase';
 
@@ -33,6 +34,7 @@ export default function Autenticacao({ children }) {
   const [perfil, setPerfil] = useState(null);
   const [erroAcesso, setErroAcesso] = useState('');
   const [carregandoLogin, setCarregandoLogin] = useState(false);
+  const [carregandoCadastro, setCarregandoCadastro] = useState(false);
 
   useEffect(() => {
     if (!firebaseConfigurado) {
@@ -103,6 +105,37 @@ export default function Autenticacao({ children }) {
     }
   }
 
+  async function fazerCadastro(nome, email, senha, nomeEmpresa) {
+    if (!nome.trim() || !nomeEmpresa.trim() || !email.trim() || !senha) {
+      setErroAcesso('Preencha todos os campos para criar sua conta e empresa.');
+      return;
+    }
+
+    if (senha.length < 6) {
+      setErroAcesso('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    setErroAcesso('');
+    setCarregandoCadastro(true);
+
+    try {
+      await registrarResponsavel(nome, email, senha, nomeEmpresa);
+    } catch (erro) {
+      if (erro.cadastroConcluido) {
+        setErroAcesso('A conta e a empresa foram criadas, mas não foi possível entrar automaticamente. Entre com seu e-mail e senha.');
+      } else if (erro.contaSemVinculo) {
+        setErroAcesso('A conta foi criada, mas não conseguimos concluir o vínculo com a empresa. Fale com o suporte.');
+      } else if (erro.code === 'permission-denied') {
+        setErroAcesso('Não foi possível criar a empresa. Confira se as regras do Firestore estão atualizadas.');
+      } else {
+        setErroAcesso(mensagemErroAutenticacao(erro));
+      }
+    } finally {
+      setCarregandoCadastro(false);
+    }
+  }
+
   async function recuperarSenha(email) {
     try {
       await enviarRecuperacaoSenha(email.trim());
@@ -138,16 +171,22 @@ export default function Autenticacao({ children }) {
     <TelaLogin
       erro={erroAcesso}
       firebaseAtivo={firebaseConfigurado}
-      carregando={carregandoLogin}
+      carregando={carregandoLogin || carregandoCadastro}
+      carregandoCadastro={carregandoCadastro}
       onEntrar={fazerLogin}
       onRecuperarSenha={recuperarSenha}
+      onRegistrar={fazerCadastro}
+      onLimparErro={() => setErroAcesso('')}
     />
   );
 }
 
-function TelaLogin({ erro, firebaseAtivo, carregando, onEntrar, onRecuperarSenha }) {
+function TelaLogin({ erro, firebaseAtivo, carregando, carregandoCadastro, onEntrar, onRecuperarSenha, onRegistrar, onLimparErro }) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [nomeResponsavel, setNomeResponsavel] = useState('');
+  const [nomeEmpresa, setNomeEmpresa] = useState('');
+  const [mostrarCadastro, setMostrarCadastro] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarRecuperacao, setMostrarRecuperacao] = useState(false);
   const [emailRecuperacao, setEmailRecuperacao] = useState('');
@@ -186,8 +225,29 @@ function TelaLogin({ erro, firebaseAtivo, carregando, onEntrar, onRecuperarSenha
           <ScrollView contentContainerStyle={styles.conteudoLogin} keyboardShouldPersistTaps="handled">
             <View style={styles.cartaoLogin}>
               <Image source={require('../assets/logo-poolday.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="Logo Pool Day" />
-              <Text style={styles.tituloLogin}>Acesse o Pool Day</Text>
-              <Text style={styles.subtituloLogin}>Entre com a conta da sua empresa.</Text>
+              <Text style={styles.tituloLogin}>{mostrarCadastro ? 'Cadastre sua empresa' : 'Acesse o Pool Day'}</Text>
+              <Text style={styles.subtituloLogin}>{mostrarCadastro ? 'Crie uma conta para começar a usar o Pool Day.' : 'Entre com a conta da sua empresa.'}</Text>
+
+              {mostrarCadastro && (
+                <>
+                  <TextInput
+                    accessibilityLabel="Nome do responsável"
+                    autoCapitalize="words"
+                    placeholder="Seu nome"
+                    style={styles.campoLogin}
+                    value={nomeResponsavel}
+                    onChangeText={setNomeResponsavel}
+                  />
+                  <TextInput
+                    accessibilityLabel="Nome da empresa"
+                    autoCapitalize="words"
+                    placeholder="Nome da empresa"
+                    style={styles.campoLogin}
+                    value={nomeEmpresa}
+                    onChangeText={setNomeEmpresa}
+                  />
+                </>
+              )}
 
               <TextInput
                 accessibilityLabel="E-mail"
@@ -218,20 +278,44 @@ function TelaLogin({ erro, firebaseAtivo, carregando, onEntrar, onRecuperarSenha
               <Pressable
                 accessibilityRole="button"
                 disabled={!firebaseAtivo || carregando}
-                onPress={() => onEntrar(email, senha)}
+                onPress={() => mostrarCadastro
+                  ? onRegistrar(nomeResponsavel, email, senha, nomeEmpresa)
+                  : onEntrar(email, senha)}
                 style={({ pressed }) => [styles.botaoEntrar, (!firebaseAtivo || carregando) && styles.botaoDesativado, pressed && styles.botaoPressionado]}
               >
-                <Text style={styles.textoBotao}>{carregando ? 'Entrando...' : 'Entrar'}</Text>
+                <Text style={styles.textoBotao}>{mostrarCadastro
+                  ? carregandoCadastro ? 'Criando conta...' : 'Criar conta'
+                  : carregando ? 'Entrando...' : 'Entrar'}</Text>
               </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                disabled={!firebaseAtivo || carregando}
-                onPress={() => { setEmailRecuperacao(email); setMostrarRecuperacao(true); }}
-                style={styles.linkRecuperacao}
-              >
-                <Text style={styles.textoLink}>Esqueci minha senha</Text>
-              </Pressable>
+              {mostrarCadastro ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => { onLimparErro(); setMostrarCadastro(false); }}
+                  style={styles.linkRecuperacao}
+                >
+                  <Text style={styles.textoLink}>Já tem conta? Entrar</Text>
+                </Pressable>
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!firebaseAtivo || carregando}
+                    onPress={() => { setEmailRecuperacao(email); setMostrarRecuperacao(true); }}
+                    style={styles.linkRecuperacao}
+                  >
+                    <Text style={styles.textoLink}>Esqueci minha senha</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!firebaseAtivo || carregando}
+                    onPress={() => { onLimparErro(); setMostrarCadastro(true); }}
+                    style={styles.linkRecuperacao}
+                  >
+                    <Text style={styles.textoLink}>Cadastre-se</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
