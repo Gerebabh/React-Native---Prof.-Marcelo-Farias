@@ -27,7 +27,7 @@ O envio usa o e-mail de redefinição de senha do Firebase Authentication e est�
 
 O aplicativo tem abas na parte inferior. O responsável acessa Início, Clientes, Visitas e Equipe. O tratador acessa Início e Minhas visitas. O cadastro de clientes, o convite da equipe e o acompanhamento das visitas ficam em telas separadas.
 
-Na tela Início, o responsável acompanha clientes ativos, visitas agendadas para hoje e funcionários, com atalhos para as áreas correspondentes. O cadastro de cliente, o agendamento de visita e o convite de tratador aparecem ao tocar em seus botões; as telas mostram os registros antes dos formulários. A lista de clientes pode ser pesquisada. Clientes começam ativos e podem ser ativados ou desativados na tela Clientes. O responsável pode atribuir uma visita a si mesmo quando trabalha sem tratadores.
+Na tela Início, o responsável acompanha clientes ativos, visitas agendadas para hoje e funcionários, com atalhos para as áreas correspondentes. O cadastro de cliente, o agendamento de visita e o convite de tratador aparecem ao tocar em seus botões; as telas mostram os registros antes dos formulários. A lista de clientes pode ser pesquisada. Clientes começam ativos e podem ser ativados ou desativados na tela Clientes. O responsável pode atribuir uma visita a si mesmo quando trabalha sem tratadores. Na tela Equipe, o responsável pode abrir a agenda de cada tratador; cada tratador acessa somente as próprias visitas.
 
 ## Documentação
 
