@@ -535,7 +535,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
         )}
         {abaAtual === 'equipe' && responsavel && (
           <ScrollArea>
-            <TelaEquipe nome={nomeTratador} email={emailTratador} tratadores={tratadores} enviando={enviandoConvite} onNome={setNomeTratador} onEmail={setEmailTratador} onConvidar={enviarConvite} />
+            <TelaEquipe nome={nomeTratador} email={emailTratador} tratadores={tratadores} visitas={visitas} enviando={enviandoConvite} onNome={setNomeTratador} onEmail={setEmailTratador} onConvidar={enviarConvite} />
           </ScrollArea>
         )}
         {abaAtual === 'visitas' && (

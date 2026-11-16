@@ -56,6 +56,10 @@ async function prepararDocumentos() {
       [caminhoEmpresa(empresaA, 'membros', 'membro-inativo'), { papel: 'tratador', ativo: false }],
       [caminhoEmpresa(empresaA, 'clientes', 'cliente-a'), { nome: 'Cliente A' }],
       [caminhoEmpresa(empresaB, 'clientes', 'cliente-b'), { nome: 'Cliente B' }],
+      [caminhoEmpresa(empresaB, 'visitas', 'visita-empresa-b'), {
+        localId: 'local-b', piscinaId: 'piscina-b', tratadorUid: 'tratador-b',
+        status: 'Pendente', servico: 'Inspeção',
+      }],
       [caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'), {
         localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA,
         status: 'Pendente', servico: 'Inspeção',
@@ -109,6 +113,7 @@ describe('regras de acesso por empresa e papel', () => {
     const banco = firestoreDo(usuarioResponsavelA);
     await assertSucceeds(getDoc(doc(banco, `empresas/${empresaA}`)));
     await assertFails(getDoc(doc(banco, caminhoEmpresa(empresaB, 'clientes', 'cliente-b'))));
+    await assertFails(getDoc(doc(banco, caminhoEmpresa(empresaB, 'visitas', 'visita-empresa-b'))));
     await assertFails(getDoc(doc(banco, `empresas/${empresaB}`)));
   });
 

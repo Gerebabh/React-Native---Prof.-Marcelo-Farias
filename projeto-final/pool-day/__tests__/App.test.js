@@ -197,6 +197,38 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.queryByPlaceholderText('Nome do tratador')).toBeNull();
   });
 
+  test('responsável abre a agenda do funcionário com visitas atribuídas a ele', async () => {
+    Firebase.observarVisitas.mockImplementationOnce((_empresaId, _usuarioId, _papel, aoAtualizar) => {
+      aoAtualizar([
+        { id: 'visita-joana', tratadorUid: 'tratador-1', data: '20/11/2026', local: 'Casa da Joana', servico: 'Inspeção', status: 'Pendente' },
+        { id: 'visita-paulo', tratadorUid: 'tratador-2', data: '19/11/2026', local: 'Casa do Paulo', servico: 'Aplicar produtos', status: 'Executada' },
+      ]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Equipe');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Ver agenda de Joana' }));
+
+    expect(tela.getByText('Agenda de Joana')).toBeTruthy();
+    expect(tela.getByText('Casa da Joana')).toBeTruthy();
+    expect(tela.queryByText('Casa do Paulo')).toBeNull();
+    expect(tela.getByText('Status: Pendente')).toBeTruthy();
+    await fireEvent.press(tela.getByRole('button', { name: '‹ Voltar para equipe' }));
+    expect(tela.getByRole('button', { name: 'Ver agenda de Joana' })).toBeTruthy();
+  });
+
+  test('mostra agenda vazia quando funcionário ainda não tem visitas', async () => {
+    Firebase.observarVisitas.mockImplementationOnce((_empresaId, _usuarioId, _papel, aoAtualizar) => {
+      aoAtualizar([]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Equipe');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Ver agenda de Joana' }));
+
+    expect(tela.getByText('Nenhuma visita atribuída a este funcionário.')).toBeTruthy();
+  });
+
   test('início permite acessar as visitas rapidamente', async () => {
     Firebase.observarTratadores.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); });
     const tela = await render(<App />);
@@ -430,6 +462,21 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.queryByText('Dados do local')).toBeNull();
     expect(tela.queryByText('Equipe de tratadores')).toBeNull();
     expect(tela.queryByRole('button', { name: 'Adicionar visita' })).toBeNull();
+    expect(Firebase.observarVisitas).toHaveBeenCalledWith(
+      'empresa-teste', 'usuario-teste', 'tratador', expect.any(Function), expect.any(Function)
+    );
+  });
+
+  test('agenda do tratador mostra somente visitas recebidas pelo seu UID', async () => {
+    mockSessao.papel = 'tratador';
+    Firebase.observarVisitas.mockImplementationOnce((_empresaId, usuarioId, _papel, aoAtualizar) => {
+      aoAtualizar([{ id: 'visita-propria', tratadorUid: usuarioId, data: '20/11/2026', local: 'Casa atendida', servico: 'Inspeção', status: 'Pendente' }]);
+      return jest.fn();
+    });
+    const tela = await renderVisitas(<App visitasIniciais={[]} />);
+
+    expect(tela.getByText('Casa atendida')).toBeTruthy();
+    expect(tela.queryByText('Equipe de tratadores')).toBeNull();
     expect(Firebase.observarVisitas).toHaveBeenCalledWith(
       'empresa-teste', 'usuario-teste', 'tratador', expect.any(Function), expect.any(Function)
     );
