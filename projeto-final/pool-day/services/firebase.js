@@ -301,6 +301,11 @@ export async function atualizarClienteAtivo(empresaId, clienteId, ativo) {
   await updateDoc(doc(banco, 'empresas', empresaId, 'clientes', clienteId), { ativo });
 }
 
+export async function atualizarTratamentoPadrao(empresaId, piscinaId, dados) {
+  verificarConfiguracao();
+  await updateDoc(doc(banco, 'empresas', empresaId, 'piscinas', piscinaId), dados);
+}
+
 export function observarPiscinas(empresaId, aoAtualizar, aoErro) {
   verificarConfiguracao();
   const referencia = collection(banco, 'empresas', empresaId, 'piscinas');

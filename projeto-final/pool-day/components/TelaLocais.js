@@ -2,8 +2,9 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
 import { Picker } from '@react-native-picker/picker';
 import { cores } from '../styles/colors';
+import PadraoTratamento from './PadraoTratamento';
 
-export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, piscinas, clientes, mostrarFormulario, onMostrarFormulario, onCancelarFormulario, onCliente, onEndereco, onTipoPiscina, onLitragem, onSalvar, onAlternarCliente }) {
+export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, piscinas, clientes, mostrarFormulario, onMostrarFormulario, onCancelarFormulario, onCliente, onEndereco, onTipoPiscina, onLitragem, onSalvar, onAlternarCliente, onSalvarTratamento }) {
   const [busca, setBusca] = useState('');
   const termoBusca = busca.trim().toLocaleLowerCase('pt-BR');
   const clientesFiltrados = clientes.filter((item) => {
@@ -74,6 +75,7 @@ export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, p
                 <Text style={styles.tituloResidencia}>Residência cadastrada</Text>
                 <Text style={styles.dadoResidencia}>Endereço: {piscina.endereco}</Text>
                 <Text style={styles.dadoResidencia}>Piscina de {piscina.tipoPiscina} • {piscina.litragem} L</Text>
+                <PadraoTratamento piscina={piscina} onSalvar={onSalvarTratamento} />
               </View>
             ))}
           </View>
@@ -85,6 +87,7 @@ export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, p
           <Text style={styles.nomeResidencia}>{piscina.cliente}</Text>
           <Text style={styles.dadoResidencia}>Endereço: {piscina.endereco}</Text>
           <Text style={styles.dadoResidencia}>Piscina de {piscina.tipoPiscina} • {piscina.litragem} L</Text>
+          <PadraoTratamento piscina={piscina} onSalvar={onSalvarTratamento} />
         </View>
       ))}
       {clientesFiltrados.length === 0 && piscinasSemCliente.length === 0 && (

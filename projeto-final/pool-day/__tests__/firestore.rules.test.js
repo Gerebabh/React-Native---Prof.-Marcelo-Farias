@@ -56,6 +56,7 @@ async function prepararDocumentos() {
       [caminhoEmpresa(empresaA, 'membros', 'membro-inativo'), { papel: 'tratador', ativo: false }],
       [caminhoEmpresa(empresaA, 'clientes', 'cliente-a'), { nome: 'Cliente A' }],
       [caminhoEmpresa(empresaB, 'clientes', 'cliente-b'), { nome: 'Cliente B' }],
+      [caminhoEmpresa(empresaA, 'piscinas', 'piscina-a'), { cliente: 'Casa A', litragem: 13000 }],
       [caminhoEmpresa(empresaB, 'visitas', 'visita-empresa-b'), {
         localId: 'local-b', piscinaId: 'piscina-b', tratadorUid: 'tratador-b',
         status: 'Pendente', servico: 'Inspeção',
@@ -120,12 +121,17 @@ describe('regras de acesso por empresa e papel', () => {
   test('responsável pode consultar e manter cadastros e visitas da empresa', async () => {
     const banco = firestoreDo(usuarioResponsavelA);
     const cliente = doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-novo'));
+    const piscina = doc(banco, caminhoEmpresa(empresaA, 'piscinas', 'piscina-a'));
     const visita = doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-nova'));
 
     await assertSucceeds(setDoc(cliente, { nome: 'Novo cliente' }));
     await assertSucceeds(updateDoc(cliente, { nome: 'Cliente atualizado' }));
     await assertSucceeds(updateDoc(cliente, { ativo: false }));
     await assertSucceeds(deleteDoc(cliente));
+    await assertSucceeds(updateDoc(piscina, {
+      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      orientacoesTratamento: 'Seguir o rótulo.',
+    }));
     await assertSucceeds(getDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'))));
     await assertSucceeds(setDoc(visita, { tratadorUid: usuarioTratadorA, status: 'Pendente' }));
   });
@@ -142,11 +148,13 @@ describe('regras de acesso por empresa e papel', () => {
   test('tratador consulta cadastros da empresa, mas não pode alterá-los', async () => {
     const banco = firestoreDo(usuarioTratadorA);
     const cliente = doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-a'));
+    const piscina = doc(banco, caminhoEmpresa(empresaA, 'piscinas', 'piscina-a'));
 
     await assertSucceeds(getDoc(cliente));
     await assertFails(setDoc(doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-novo')), { nome: 'Novo' }));
     await assertFails(updateDoc(cliente, { nome: 'Alterado' }));
     await assertFails(updateDoc(cliente, { ativo: false }));
+    await assertFails(updateDoc(piscina, { tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }] }));
     await assertFails(deleteDoc(cliente));
   });
 
