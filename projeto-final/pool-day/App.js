@@ -12,9 +12,11 @@ import TelaInicio from './components/TelaInicio';
 import TelaLocais from './components/TelaLocais';
 import TelaVisitas from './components/TelaVisitas';
 import {
+  atualizarClienteAtivo,
   atualizarVisita,
   convidarTratador,
   enviarRecuperacaoSenha,
+  observarClientes,
   observarPiscinas,
   observarTratadores,
   observarVisitas,
@@ -41,7 +43,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const abas = responsavel
     ? [
       { id: 'inicio', titulo: 'Início' },
-      { id: 'locais', titulo: 'Locais' },
+      { id: 'clientes', titulo: 'Clientes' },
       { id: 'visitas', titulo: 'Visitas' },
       { id: 'equipe', titulo: 'Equipe' },
     ]
@@ -49,11 +51,15 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       { id: 'inicio', titulo: 'Início' },
       { id: 'visitas', titulo: 'Minhas visitas' },
     ];
-  const [abaSelecionada, setAbaSelecionada] = useState('visitas');
+  const [abaSelecionada, setAbaSelecionada] = useState('inicio');
+  const [mostrarFormularioCliente, setMostrarFormularioCliente] = useState(false);
+  const [mostrarFormularioVisita, setMostrarFormularioVisita] = useState(false);
+  const [retornarParaVisitas, setRetornarParaVisitas] = useState(false);
   const [cliente, setCliente] = useState('');
   const [endereco, setEndereco] = useState('');
   const [tipoPiscina, setTipoPiscina] = useState('');
   const [litragem, setLitragem] = useState('');
+  const [clientes, setClientes] = useState([]);
   const [piscinas, setPiscinas] = useState([]);
   const [tratadores, setTratadores] = useState([]);
   const [tratadorUid, setTratadorUid] = useState('');
@@ -73,6 +79,9 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     const cancelarPiscinas = observarPiscinas(perfil.empresaId, (lista) => {
       setPiscinas(lista);
     }, () => Alert.alert('Erro', 'Não foi possível carregar os locais da empresa.'));
+    const cancelarClientes = responsavel
+      ? observarClientes(perfil.empresaId, (lista) => setClientes(lista), () => Alert.alert('Erro', 'Não foi possível carregar os clientes.'))
+      : undefined;
     const cancelarVisitas = observarVisitas(
       perfil.empresaId,
       usuario.uid,
@@ -83,12 +92,13 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     const cancelarTratadores = responsavel
       ? observarTratadores(perfil.empresaId, (lista) => {
         setTratadores(lista);
-        setTratadorUid((atual) => atual || lista[0]?.id || '');
+        setTratadorUid((atual) => !atual || atual === usuario.uid ? lista[0]?.id || usuario.uid : atual);
       }, () => Alert.alert('Erro', 'Não foi possível carregar a equipe.'))
       : undefined;
 
     return () => {
       cancelarPiscinas?.();
+      cancelarClientes?.();
       cancelarVisitas?.();
       cancelarTratadores?.();
     };
@@ -117,14 +127,70 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     try {
       const piscina = await salvarPiscina(perfil.empresaId, usuario.uid, dadosPiscina);
       setPiscinas((lista) => lista.some((item) => item.id === piscina.id) ? lista : [...lista, piscina]);
+      setClientes((lista) => lista.some((item) => item.id === piscina.clienteId)
+        ? lista
+        : [...lista, { id: piscina.clienteId, nome: piscina.cliente, ativo: true }]);
       setLocalVisitaId(piscina.id);
+      setCliente('');
+      setEndereco('');
+      setTipoPiscina('');
+      setLitragem('');
+      setMostrarFormularioCliente(false);
+
+      if (retornarParaVisitas) {
+        setRetornarParaVisitas(false);
+        setAbaSelecionada('visitas');
+        setMostrarFormularioVisita(true);
+      }
     } catch (erro) {
       Alert.alert('Não foi possível salvar', 'Confira sua conexão e tente salvar o local novamente.');
     }
   }
 
+  async function alternarClienteAtivo(clienteId) {
+    const clienteAtual = clientes.find((item) => item.id === clienteId);
+    if (!clienteAtual) return;
+    const ativo = clienteAtual.ativo === false;
+
+    try {
+      await atualizarClienteAtivo(perfil.empresaId, clienteId, ativo);
+      setClientes((lista) => lista.map((item) => item.id === clienteId ? { ...item, ativo } : item));
+      if (retornarParaVisitas && ativo && piscinas.some((piscina) => piscina.clienteId === clienteId)) {
+        setRetornarParaVisitas(false);
+        setAbaSelecionada('visitas');
+        setMostrarFormularioVisita(true);
+      }
+    } catch (_erro) {
+      Alert.alert('Não foi possível atualizar', 'Confira sua conexão e tente alterar o status do cliente novamente.');
+    }
+  }
+
+  function cadastrarClienteAntesDaVisita() {
+    setRetornarParaVisitas(true);
+    setMostrarFormularioCliente(clientes.length === 0 && piscinas.length === 0);
+    setAbaSelecionada('clientes');
+  }
+
+  function cancelarCadastroDeCliente() {
+    setMostrarFormularioCliente(false);
+    setRetornarParaVisitas(false);
+  }
+
+  function iniciarNovoServico() {
+    const possuiLocalAtivo = piscinas.some((piscina) => clientes.find((item) => item.id === piscina.clienteId)?.ativo !== false);
+
+    if (!possuiLocalAtivo) {
+      cadastrarClienteAntesDaVisita();
+      return;
+    }
+
+    setMostrarFormularioVisita(true);
+    setAbaSelecionada('visitas');
+  }
+
   async function adicionarVisita() {
-    const piscina = piscinas.find((item) => item.id === localVisitaId);
+    const piscina = piscinas.find((item) => item.id === localVisitaId
+      && clientes.find((clienteAtual) => clienteAtual.id === item.clienteId)?.ativo !== false);
     if (!piscina || !dataVisita || !servico) {
       Alert.alert('Cadastro incompleto', 'Preencha a data, o local e o tipo de serviço da visita.');
       return;
@@ -145,7 +211,9 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       return;
     }
 
-    const tratador = tratadores.find((item) => item.id === tratadorUid);
+    const tratador = tratadorUid === usuario.uid
+      ? { nome: perfil.nome || usuario.email }
+      : tratadores.find((item) => item.id === tratadorUid);
     const visita = {
       data: formatarData(dataVisita),
       localId: piscina.localId,
@@ -176,6 +244,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     setServico('');
     setOrientacao('');
     setTratadorUid('');
+    setMostrarFormularioVisita(false);
   }
 
   function selecionarDataVisita(dataSelecionada) {
@@ -226,7 +295,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   async function enviarConvite() {
     if (!nomeTratador.trim() || !emailTratador.trim()) {
       Alert.alert('Cadastro incompleto', 'Informe o nome e o e-mail do tratador.');
-      return;
+      return false;
     }
 
     setEnviandoConvite(true);
@@ -235,6 +304,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       setNomeTratador('');
       setEmailTratador('');
       Alert.alert('Convite enviado', 'O tratador receberá um e-mail para definir a senha e acessar a empresa.');
+      return true;
     } catch (erro) {
       if (erro.conviteCriado) {
         setNomeTratador('');
@@ -247,12 +317,12 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             { text: 'Reenviar e-mail', onPress: () => reenviarEmailConvite(erro.email) },
           ]
         );
-        return;
+        return false;
       }
 
       if (erro.contaSemVinculo) {
         Alert.alert('Cadastro incompleto', 'A conta foi criada, mas o vínculo com a empresa falhou e não pôde ser removido. Exclua essa conta no Firebase Authentication antes de tentar novamente.');
-        return;
+        return false;
       }
 
       const mensagem = erro.code === 'auth/email-already-in-use' || erro.code === 'auth/email-already-exists'
@@ -265,6 +335,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
               ? 'O limite de envios foi atingido. Aguarde e tente novamente mais tarde.'
               : 'Não foi possível concluir o convite. Confira os dados e tente novamente.';
       Alert.alert('Não foi possível enviar o convite', mensagem);
+      return false;
     } finally {
       setEnviandoConvite(false);
     }
@@ -418,6 +489,10 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   }
 
   const abaAtual = abas.some((aba) => aba.id === abaSelecionada) ? abaSelecionada : 'inicio';
+  const clientesAtivos = clientes.filter((item) => item.ativo !== false).length;
+  const hoje = formatarData(new Date());
+  const agendamentosHoje = visitas.filter((item) => item.data === hoje).length;
+  const piscinasAtivas = piscinas.filter((piscina) => clientes.find((item) => item.id === piscina.clienteId)?.ativo !== false);
 
   return (
     <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -435,13 +510,26 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
 
       <View style={styles.conteudo}>
         {abaAtual === 'inicio' && (
-          <TelaInicio nome={perfil.nome || usuario.email} empresa={perfil.nomeEmpresa} aoAbrirVisitas={() => setAbaSelecionada('visitas')} />
+          <TelaInicio
+            nome={perfil.nome || usuario.email}
+            empresa={perfil.nomeEmpresa}
+            responsavel={responsavel}
+            clientesAtivos={clientesAtivos}
+            agendamentosHoje={agendamentosHoje}
+            funcionarios={tratadores.length}
+            aoAbrirLocais={() => setAbaSelecionada('clientes')}
+            aoAbrirVisitas={() => setAbaSelecionada('visitas')}
+            aoAbrirEquipe={() => setAbaSelecionada('equipe')}
+            aoAdicionarServico={responsavel ? iniciarNovoServico : () => setAbaSelecionada('visitas')}
+          />
         )}
-        {abaAtual === 'locais' && responsavel && (
+        {abaAtual === 'clientes' && responsavel && (
           <ScrollArea>
             <TelaLocais
-              cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas}
+              cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas} clientes={clientes}
+              mostrarFormulario={mostrarFormularioCliente} onMostrarFormulario={() => setMostrarFormularioCliente(true)} onCancelarFormulario={cancelarCadastroDeCliente}
               onCliente={setCliente} onEndereco={setEndereco} onTipoPiscina={setTipoPiscina} onLitragem={setLitragem} onSalvar={salvarResidencia}
+              onAlternarCliente={alternarClienteAtivo}
             />
           </ScrollArea>
         )}
@@ -452,12 +540,17 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
         )}
         {abaAtual === 'visitas' && (
           <TelaVisitas
-            responsavel={responsavel} piscinas={piscinas} tratadores={tratadores} visitas={visitas}
+            responsavel={responsavel} possuiLocalAtivo={piscinasAtivas.length > 0} temClientes={clientes.length > 0 || piscinas.length > 0}
+            responsavelUid={usuario.uid} responsavelNome={perfil.nome || usuario.email}
+            piscinas={piscinasAtivas} tratadores={tratadores} visitas={visitas}
             localVisitaId={localVisitaId} tratadorUid={tratadorUid} dataVisita={dataVisita} mostrarCalendario={mostrarCalendario}
+            mostrarFormulario={mostrarFormularioVisita}
             servico={servico} orientacao={orientacao} onLocal={setLocalVisitaId} onTratador={setTratadorUid}
             onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
             onFecharCalendario={() => setMostrarCalendario(false)} onServico={setServico} onOrientacao={setOrientacao}
             onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
+            onAbrirFormulario={() => setMostrarFormularioVisita(true)} onCancelarFormulario={() => setMostrarFormularioVisita(false)}
+            onCadastrarCliente={cadastrarClienteAntesDaVisita}
             onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita}
             onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita}
           />

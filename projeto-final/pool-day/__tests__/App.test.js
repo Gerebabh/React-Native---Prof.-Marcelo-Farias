@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { act, fireEvent as eventos, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent as eventos, render as renderOriginal, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as Firebase from '../services/firebase';
@@ -18,9 +18,11 @@ const fireEvent = {
 };
 
 jest.mock('../services/firebase', () => ({
+  atualizarClienteAtivo: jest.fn(async () => {}),
   atualizarVisita: jest.fn(async () => {}),
   convidarTratador: jest.fn(async () => ({})),
   enviarRecuperacaoSenha: jest.fn(async () => {}),
+  observarClientes: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarPiscinas: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarTratadores: jest.fn((_empresaId, aoAtualizar) => {
     aoAtualizar([{ id: 'tratador-1', nome: 'Joana', email: 'joana@poolday.com' }]);
@@ -115,16 +117,29 @@ describe('cadastro de cliente e visitas', () => {
     jest.clearAllMocks();
   });
 
+  async function render(elemento) {
+    const tela = await renderOriginal(elemento);
+    await fireEvent.press(tela.getByRole('tab', { name: mockSessao.papel === 'tratador' ? 'Minhas visitas' : 'Visitas' }));
+    return tela;
+  }
+
   async function preencherLocal(tela, { cliente = 'Casa da família', endereco = 'Rua das Flores, 10', piscina = true, litragem = '13000' } = {}) {
-    const estavaEmVisitas = !tela.queryByPlaceholderText('Cliente');
-    if (estavaEmVisitas) await fireEvent.press(tela.getByRole('tab', { name: 'Locais' }));
+    const estavaEmVisitas = Boolean(tela.queryByText('Próximas visitas'));
+    if (estavaEmVisitas && tela.queryByRole('button', { name: 'Cadastrar cliente' })) {
+      await fireEvent.press(tela.getByRole('button', { name: 'Cadastrar cliente' }));
+    } else if (estavaEmVisitas) {
+      await fireEvent.press(tela.getByRole('tab', { name: 'Clientes' }));
+    }
+    if (tela.queryByRole('button', { name: 'Adicionar cliente' })) {
+      await fireEvent.press(tela.getByRole('button', { name: 'Adicionar cliente' }));
+    }
 
     const { getByPlaceholderText, getByText, getByRole } = tela;
     await fireEvent.changeText(getByPlaceholderText('Cliente'), cliente);
     await fireEvent.changeText(getByPlaceholderText('Endereço'), endereco);
     if (piscina) await fireEvent.press(getByText('Fibra'));
     await fireEvent.changeText(getByPlaceholderText('Litragem em litros (ex.: 13000)'), litragem);
-    await fireEvent.press(getByRole('button', { name: 'Salvar residência' }));
+    await fireEvent.press(getByRole('button', { name: 'Salvar cliente' }));
     const volumeValido = Number.isInteger(Number(litragem.trim())) && Number(litragem.trim()) > 0;
     if (cliente.trim() && endereco.trim() && piscina && volumeValido) {
       await waitFor(() => expect(Firebase.salvarPiscina).toHaveBeenCalled());
@@ -140,11 +155,15 @@ describe('cadastro de cliente e visitas', () => {
   }
 
   async function renderLocais(elemento = <App />) {
-    return renderNaAba(elemento, 'Locais');
+    const tela = await renderNaAba(elemento, 'Clientes');
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar cliente' }));
+    return tela;
   }
 
   async function renderEquipe(elemento = <App />) {
-    return renderNaAba(elemento, 'Equipe');
+    const tela = await renderNaAba(elemento, 'Equipe');
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar tratador' }));
+    return tela;
   }
 
   async function renderVisitas(elemento = <App />) {
@@ -156,30 +175,186 @@ describe('cadastro de cliente e visitas', () => {
     expect(getByText('Pool Day')).toBeTruthy();
   });
 
-  test('responsável navega entre visitas, locais e equipe pelas abas inferiores', async () => {
+  test('responsável navega entre visitas, clientes e equipe pelas abas inferiores', async () => {
     const tela = await render(<App />);
 
     expect(tela.getByRole('tab', { name: 'Início' })).toBeTruthy();
-    expect(tela.getByRole('tab', { name: 'Locais' })).toBeTruthy();
+    expect(tela.getByRole('tab', { name: 'Clientes' })).toBeTruthy();
     expect(tela.getByRole('tab', { name: 'Visitas' })).toBeTruthy();
     expect(tela.getByRole('tab', { name: 'Equipe' })).toBeTruthy();
     expect(tela.getByText('Próximas visitas')).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Cadastrar cliente' })).toBeTruthy();
+    expect(tela.queryByRole('button', { name: 'Selecionar data da visita' })).toBeNull();
 
-    await fireEvent.press(tela.getByRole('tab', { name: 'Locais' }));
-    expect(tela.getByPlaceholderText('Cliente')).toBeTruthy();
+    await fireEvent.press(tela.getByRole('tab', { name: 'Clientes' }));
+    expect(tela.getByRole('button', { name: 'Adicionar cliente' })).toBeTruthy();
+    expect(tela.getByLabelText('Buscar cliente')).toBeTruthy();
+    expect(tela.queryByPlaceholderText('Cliente')).toBeNull();
     expect(tela.queryByText('Próximas visitas')).toBeNull();
 
     await fireEvent.press(tela.getByRole('tab', { name: 'Equipe' }));
-    expect(tela.getByPlaceholderText('Nome do tratador')).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Adicionar tratador' })).toBeTruthy();
+    expect(tela.queryByPlaceholderText('Nome do tratador')).toBeNull();
   });
 
   test('início permite acessar as visitas rapidamente', async () => {
+    Firebase.observarTratadores.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); });
     const tela = await render(<App />);
     await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
 
     expect(tela.getByText('Acompanhe seus atendimentos e organize a rotina da piscina.')).toBeTruthy();
-    await fireEvent.press(tela.getByRole('button', { name: 'Ver visitas' }));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar serviço' }));
+    expect(tela.getByPlaceholderText('Cliente')).toBeTruthy();
+    await preencherLocal(tela);
+
     expect(tela.getByText('Próximas visitas')).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Selecionar data da visita' })).toBeTruthy();
+    expect(tela.getByText('Pessoa Teste (eu)')).toBeTruthy();
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar no calendário'));
+    await fireEvent.press(tela.getByText('Inspeção'));
+    await fireEvent.press(tela.getByText('Pessoa Teste (eu)'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+
+    await waitFor(() => expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
+      tratadorUid: 'usuario-teste', tratadorNome: 'Pessoa Teste',
+    })));
+  });
+
+  test('abre o dashboard na primeira tela do aplicativo', async () => {
+    const tela = await renderOriginal(<App />);
+
+    expect(tela.getByLabelText('Clientes ativos: 0')).toBeTruthy();
+    expect(tela.getByLabelText('Agendamentos de hoje: 0')).toBeTruthy();
+    expect(tela.getByLabelText('Funcionários: 1')).toBeTruthy();
+  });
+
+  test('dashboard mostra zeros quando ainda não há cadastros nem visitas hoje', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); });
+    Firebase.observarTratadores.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); });
+    const tela = await render(<App visitasIniciais={[]} />);
+    await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
+
+    expect(tela.getByLabelText('Clientes ativos: 0')).toBeTruthy();
+    expect(tela.getByLabelText('Agendamentos de hoje: 0')).toBeTruthy();
+    expect(tela.queryByLabelText(/Funcionários:/)).toBeNull();
+  });
+
+  test('dashboard conta somente clientes ativos e agendamentos de hoje', async () => {
+    const hoje = new Date();
+    const dataHoje = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+    const amanha = new Date(hoje);
+    amanha.setDate(amanha.getDate() + 1);
+    const dataAmanha = `${String(amanha.getDate()).padStart(2, '0')}/${String(amanha.getMonth() + 1).padStart(2, '0')}/${amanha.getFullYear()}`;
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Cliente ativo', ativo: true }, { id: 'cliente-2', nome: 'Cliente inativo', ativo: false }]);
+      return jest.fn();
+    });
+    Firebase.observarTratadores.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'tratador-1', nome: 'Joana', ativo: true }, { id: 'tratador-2', nome: 'Paulo', ativo: true }]);
+      return jest.fn();
+    });
+    const tela = await render(<App visitasIniciais={[
+      { id: 'hoje', data: dataHoje, status: 'Pendente' },
+      { id: 'amanha', data: dataAmanha, status: 'Pendente' },
+    ]} />);
+    await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
+
+    expect(tela.getByLabelText('Clientes ativos: 1')).toBeTruthy();
+    expect(tela.getByLabelText('Agendamentos de hoje: 1')).toBeTruthy();
+    expect(tela.getByLabelText('Funcionários: 2')).toBeTruthy();
+
+    await fireEvent.press(tela.getByLabelText('Clientes ativos: 1'));
+    expect(tela.getByRole('tab', { name: 'Clientes' })).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Adicionar cliente' })).toBeTruthy();
+    await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
+    await fireEvent.press(tela.getByLabelText('Agendamentos de hoje: 1'));
+    expect(tela.getByText('Próximas visitas')).toBeTruthy();
+  });
+
+  test('responsável ativa e desativa um cliente pela tela de locais', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    const tela = await renderLocais();
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Desativar cliente: Casa da família' }));
+    await waitFor(() => expect(Firebase.atualizarClienteAtivo).toHaveBeenCalledWith('empresa-teste', 'cliente-1', false));
+    expect(tela.getByText('Status: Inativo')).toBeTruthy();
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Ativar cliente: Casa da família' }));
+    await waitFor(() => expect(Firebase.atualizarClienteAtivo).toHaveBeenLastCalledWith('empresa-teste', 'cliente-1', true));
+    expect(tela.getByText('Status: Ativo')).toBeTruthy();
+  });
+
+  test('pesquisa clientes pelo nome na lista', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([
+        { id: 'cliente-1', nome: 'Casa da família', ativo: true },
+        { id: 'cliente-2', nome: 'Chácara do lago', ativo: true },
+      ]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Clientes');
+
+    expect(tela.getByText('Casa da família')).toBeTruthy();
+    expect(tela.getByText('Chácara do lago')).toBeTruthy();
+    await fireEvent.changeText(tela.getByLabelText('Buscar cliente'), 'chácara');
+
+    expect(tela.getByText('Chácara do lago')).toBeTruthy();
+    expect(tela.queryByText('Casa da família')).toBeNull();
+  });
+
+  test('pesquisa clientes pelo endereço da piscina', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([
+        { id: 'cliente-1', nome: 'Casa da família', ativo: true },
+        { id: 'cliente-2', nome: 'Chácara do lago', ativo: true },
+      ]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([
+        { id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10' },
+        { id: 'piscina-2', clienteId: 'cliente-2', cliente: 'Chácara do lago', endereco: 'Estrada do Lago, 20' },
+      ]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Clientes');
+
+    await fireEvent.changeText(tela.getByLabelText('Buscar cliente'), 'estrada do lago');
+
+    expect(tela.getByText('Chácara do lago')).toBeTruthy();
+    expect(tela.queryByText('Casa da família')).toBeNull();
+  });
+
+  test('agenda com o responsável quando a empresa ainda não tem tratadores', async () => {
+    const piscina = {
+      id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10',
+      tipoPiscina: 'Fibra', litragem: 13000,
+    };
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([piscina]); return jest.fn(); });
+    Firebase.observarTratadores.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); });
+    const tela = await render(<App />);
+
+    expect(tela.getByRole('button', { name: 'Adicionar serviço' })).toBeTruthy();
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar serviço' }));
+    await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
+    await fireEvent.press(tela.getByText('Pessoa Teste (eu)'));
+    expect(tela.getByText('Pessoa Teste (eu)')).toBeTruthy();
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar no calendário'));
+    await fireEvent.press(tela.getByText('Inspeção'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+
+    await waitFor(() => expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
+      tratadorUid: 'usuario-teste', tratadorNome: 'Pessoa Teste',
+    })));
   });
 
   test.each(['Cliente', 'Endereço', 'Tipo de piscina', 'Litragem em litros (ex.: 13000)'])(
@@ -207,6 +382,8 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Residência cadastrada')).toBeTruthy();
     expect(tela.getByText('Casa da família')).toBeTruthy();
     expect(tela.getByText('Piscina de Fibra • 13000 L')).toBeTruthy();
+    expect(tela.getByText('Status: Ativo')).toBeTruthy();
+    expect(tela.getByRole('button', { name: 'Desativar cliente: Casa da família' })).toBeTruthy();
   });
 
   test('responsável consegue convidar tratador pelo nome e e-mail', async () => {
@@ -247,7 +424,7 @@ describe('cadastro de cliente e visitas', () => {
     const tela = await renderVisitas(<App visitasIniciais={[]} />);
 
     expect(tela.getByRole('tab', { name: 'Minhas visitas' })).toBeTruthy();
-    expect(tela.queryByRole('tab', { name: 'Locais' })).toBeNull();
+    expect(tela.queryByRole('tab', { name: 'Clientes' })).toBeNull();
     expect(tela.queryByRole('tab', { name: 'Equipe' })).toBeNull();
     expect(tela.getAllByText('Minhas visitas')).toHaveLength(2);
     expect(tela.queryByText('Dados do local')).toBeNull();
@@ -276,13 +453,14 @@ describe('cadastro de cliente e visitas', () => {
     amanha.setDate(amanha.getDate() + 1);
     const dataEsperada = `${String(amanha.getDate()).padStart(2, '0')}/${String(amanha.getMonth() + 1).padStart(2, '0')}/${amanha.getFullYear()}`;
     expect(tela.getByText(dataEsperada)).toBeTruthy();
-    expect(tela.getAllByText('Casa da família — Rua das Flores, 10')).toHaveLength(2);
-    expect(tela.getAllByText('Aplicar produtos')).toHaveLength(2);
+    expect(tela.getAllByText('Casa da família — Rua das Flores, 10')).toHaveLength(1);
+    expect(tela.getAllByText('Aplicar produtos')).toHaveLength(1);
     expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy();
   });
 
   test('não permite adicionar visita sem data, local e serviço', async () => {
     const tela = await render(<App />);
+    await preencherLocal(tela);
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
     expect(alerta).toHaveBeenCalledWith('Cadastro incompleto', 'Preencha a data, o local e o tipo de serviço da visita.');
   });
