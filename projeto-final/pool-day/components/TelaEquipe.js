@@ -1,18 +1,35 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
 import { cores } from '../styles/colors';
 
 export default function TelaEquipe({ nome, email, tratadores, enviando, onNome, onEmail, onConvidar }) {
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+
+  async function convidar() {
+    const concluido = await onConvidar();
+    if (concluido) setMostrarFormulario(false);
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.formulario}>
-        <Text style={styles.tituloSecao}>Equipe de tratadores</Text>
-        <TextInput accessibilityLabel="Nome do tratador" style={styles.campo} placeholder="Nome do tratador" value={nome} onChangeText={onNome} />
-        <TextInput accessibilityLabel="E-mail do tratador" style={styles.campo} placeholder="E-mail do tratador" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={onEmail} />
-        <Pressable accessibilityRole="button" onPress={onConvidar} disabled={enviando} style={({ pressed }) => [styles.botao, pressed && styles.pressionado, enviando && styles.desativado]}>
-          <Text style={styles.textoBotao}>{enviando ? 'Enviando convite...' : 'Convidar tratador'}</Text>
+      <Text style={styles.tituloSecao}>Equipe de tratadores</Text>
+      {mostrarFormulario ? (
+        <View style={styles.formulario}>
+          <TextInput accessibilityLabel="Nome do tratador" style={styles.campo} placeholder="Nome do tratador" value={nome} onChangeText={onNome} />
+          <TextInput accessibilityLabel="E-mail do tratador" style={styles.campo} placeholder="E-mail do tratador" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={onEmail} />
+          <Pressable accessibilityRole="button" onPress={convidar} disabled={enviando} style={({ pressed }) => [styles.botao, pressed && styles.pressionado, enviando && styles.desativado]}>
+            <Text style={styles.textoBotao}>{enviando ? 'Enviando convite...' : 'Convidar tratador'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setMostrarFormulario(false)} style={styles.botaoCancelar}>
+            <Text style={styles.textoCancelar}>Cancelar</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable accessibilityRole="button" onPress={() => setMostrarFormulario(true)} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]}>
+          <Text style={styles.textoBotao}>Adicionar tratador</Text>
         </Pressable>
-        {tratadores.length === 0 && <Text style={styles.vazio}>Nenhum tratador cadastrado.</Text>}
-      </View>
+      )}
+      {tratadores.length === 0 && <Text style={styles.vazio}>Nenhum tratador cadastrado.</Text>}
       {tratadores.map((item) => (
         <View key={item.id} style={styles.cartao}>
           <Text style={styles.nome}>{item.nome || 'Tratador'}</Text>
@@ -32,6 +49,8 @@ const styles = StyleSheet.create({
   pressionado: { opacity: 0.85 },
   desativado: { opacity: 0.6 },
   textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '600' },
+  botaoCancelar: { alignItems: 'center', marginTop: 12, paddingVertical: 8 },
+  textoCancelar: { color: cores.textoSecundario, fontSize: 15, fontWeight: '600' },
   cartao: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 10, borderWidth: 1, marginTop: 10, padding: 14 },
   nome: { color: cores.texto, fontSize: 16, fontWeight: '600' },
   email: { color: cores.textoSecundario, fontSize: 14, marginTop: 3 },

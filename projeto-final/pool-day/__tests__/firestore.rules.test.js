@@ -119,6 +119,7 @@ describe('regras de acesso por empresa e papel', () => {
 
     await assertSucceeds(setDoc(cliente, { nome: 'Novo cliente' }));
     await assertSucceeds(updateDoc(cliente, { nome: 'Cliente atualizado' }));
+    await assertSucceeds(updateDoc(cliente, { ativo: false }));
     await assertSucceeds(deleteDoc(cliente));
     await assertSucceeds(getDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'))));
     await assertSucceeds(setDoc(visita, { tratadorUid: usuarioTratadorA, status: 'Pendente' }));
@@ -140,6 +141,7 @@ describe('regras de acesso por empresa e papel', () => {
     await assertSucceeds(getDoc(cliente));
     await assertFails(setDoc(doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-novo')), { nome: 'Novo' }));
     await assertFails(updateDoc(cliente, { nome: 'Alterado' }));
+    await assertFails(updateDoc(cliente, { ativo: false }));
     await assertFails(deleteDoc(cliente));
   });
 

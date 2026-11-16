@@ -33,6 +33,11 @@ jest.mock('firebase/firestore', () => ({
     : { id: 'empresa-nova', path: 'empresas/empresa-nova' }),
   getDoc: jest.fn(),
   getFirestore: jest.fn((app) => ({ nome: app?.name === 'pool-day-convites' ? 'banco-convites' : 'banco-teste' })),
+  onSnapshot: jest.fn((_referencia, aoAtualizar) => {
+    aoAtualizar({ docs: [] });
+    return jest.fn();
+  }),
+  updateDoc: jest.fn(async () => {}),
   writeBatch: jest.fn(() => ({ set: jest.fn(), commit: jest.fn(async () => {}) })),
 }));
 
@@ -97,6 +102,42 @@ describe('serviço Firebase', () => {
 
     await expect(firebase.buscarPerfil('uid-ana')).resolves.toBeNull();
     expect(firestore.getDoc).toHaveBeenCalledTimes(2);
+  });
+
+  test('acompanha os clientes cadastrados da empresa', () => {
+    const { firebase, firestore } = carregarFirebase();
+    const cliente = { id: 'cliente-1', data: () => ({ nome: 'Casa da família', ativo: true }) };
+    firestore.onSnapshot.mockImplementationOnce((_referencia, aoAtualizar) => {
+      aoAtualizar({ docs: [cliente] });
+      return 'cancelar-observacao';
+    });
+    const aoAtualizar = jest.fn();
+
+    expect(firebase.observarClientes('empresa-1', aoAtualizar)).toBe('cancelar-observacao');
+    expect(firestore.collection).toHaveBeenCalledWith({ nome: 'banco-teste' }, 'empresas', 'empresa-1', 'clientes');
+    expect(aoAtualizar).toHaveBeenCalledWith([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+  });
+
+  test('altera o status ativo do cliente no Firestore', async () => {
+    const { firebase, firestore } = carregarFirebase();
+
+    await firebase.atualizarClienteAtivo('empresa-1', 'cliente-1', false);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith('empresas/empresa-1/clientes/cliente-1', { ativo: false });
+  });
+
+  test('cria cliente novo com status ativo', async () => {
+    const { firebase, firestore } = carregarFirebase();
+
+    await firebase.salvarPiscina('empresa-1', 'responsavel-1', {
+      cliente: 'Casa da família', endereco: 'Rua das Flores, 10', tipoPiscina: 'Fibra', litragem: 13000,
+    });
+
+    const lote = firestore.writeBatch.mock.results[0].value;
+    expect(lote.set).toHaveBeenNthCalledWith(1, expect.any(Object), expect.objectContaining({
+      nome: 'Casa da família', ativo: true, criadaPorUid: 'responsavel-1',
+    }));
+    expect(lote.commit).toHaveBeenCalled();
   });
 
   test('cria conta em Auth separado, grava o vínculo no Firestore e envia e-mail em português', async () => {

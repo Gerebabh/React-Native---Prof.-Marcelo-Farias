@@ -5,16 +5,30 @@ import { cores } from '../styles/colors';
 import VisitasLista from './VisitasLista';
 
 export default function TelaVisitas({
-  responsavel, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, servico, orientacao,
+  responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao,
   onLocal, onTratador, onAbrirCalendario, onSelecionarData, onFecharCalendario, onServico, onOrientacao, onAdicionarVisita,
-  onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa,
+  onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa,
 }) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.secaoVisitas}>
         <Text style={styles.tituloSecao}>{responsavel ? 'Próximas visitas' : 'Minhas visitas'}</Text>
-        {responsavel && (
+        {responsavel && !possuiLocalAtivo && (
+          <View style={styles.avisoPreRequisito}>
+            <Text style={styles.textoAviso}>{temClientes ? 'Não há cliente ativo para agendar. Ative um cliente existente ou cadastre um novo.' : 'Cadastre um cliente e uma piscina antes de agendar um serviço.'}</Text>
+            <Pressable accessibilityRole="button" onPress={onCadastrarCliente} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]}>
+              <Text style={styles.textoBotao}>{temClientes ? 'Ver clientes' : 'Cadastrar cliente'}</Text>
+            </Pressable>
+          </View>
+        )}
+        {responsavel && possuiLocalAtivo && !mostrarFormulario && (
+          <Pressable accessibilityRole="button" onPress={onAbrirFormulario} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
+            <Text style={styles.textoBotao}>Adicionar serviço</Text>
+          </Pressable>
+        )}
+        {responsavel && possuiLocalAtivo && mostrarFormulario && (
           <>
+            <Text style={styles.subtituloFormulario}>Novo serviço</Text>
             <Text style={styles.rotulo}>Local / piscina</Text>
             <View style={styles.seletor}>
               <Picker selectedValue={localVisitaId} onValueChange={onLocal}>
@@ -25,7 +39,8 @@ export default function TelaVisitas({
             <Text style={styles.rotulo}>Tratador responsável</Text>
             <View style={styles.seletor}>
               <Picker selectedValue={tratadorUid} onValueChange={onTratador}>
-                <Picker.Item label={tratadores.length ? 'Selecione o tratador' : 'Convide um tratador primeiro'} value="" />
+                <Picker.Item label="Selecione quem fará o serviço" value="" />
+                <Picker.Item label={`${responsavelNome} (eu)`} value={responsavelUid} />
                 {tratadores.map((item) => <Picker.Item key={item.id} label={item.nome || item.email} value={item.id} />)}
               </Picker>
             </View>
@@ -54,6 +69,9 @@ export default function TelaVisitas({
             {servico === 'Aplicar produtos' && <TextInput accessibilityLabel="Orientação de produtos" style={styles.campo} placeholder="Orientação de produtos" value={orientacao} onChangeText={onOrientacao} />}
             <Pressable accessibilityRole="button" onPress={onAdicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
               <Text style={styles.textoBotao}>Adicionar visita</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={onCancelarFormulario} style={styles.botaoCancelar}>
+              <Text style={styles.textoCancelar}>Cancelar</Text>
             </Pressable>
           </>
         )}
@@ -85,6 +103,9 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: cores.fundoTela, padding: 20, paddingTop: 16 },
   secaoVisitas: { backgroundColor: cores.branco, borderRadius: 14, padding: 18 },
   tituloSecao: { color: cores.azulEscuro, fontSize: 19, fontWeight: '600', marginBottom: 12 },
+  subtituloFormulario: { color: cores.texto, fontSize: 16, fontWeight: '600', marginBottom: 10, marginTop: 14 },
+  avisoPreRequisito: { backgroundColor: cores.fundoCartao, borderRadius: 8, marginBottom: 14, padding: 12 },
+  textoAviso: { color: cores.textoSecundario, fontSize: 15, lineHeight: 21 },
   rotulo: { color: cores.textoSecundario, fontSize: 14, fontWeight: '600', marginBottom: 4 },
   seletor: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
   campoData: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, justifyContent: 'center', marginBottom: 12, minHeight: 46, paddingHorizontal: 12 },
@@ -94,4 +115,6 @@ const styles = StyleSheet.create({
   botao: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 8, marginTop: 4, overflow: 'hidden', padding: 14 },
   pressionado: { opacity: 0.85 },
   textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '600' },
+  botaoCancelar: { alignItems: 'center', marginTop: 12, paddingVertical: 8 },
+  textoCancelar: { color: cores.textoSecundario, fontSize: 15, fontWeight: '600' },
 });

@@ -288,6 +288,19 @@ export function observarTratadores(empresaId, aoAtualizar, aoErro) {
   }, aoErro);
 }
 
+export function observarClientes(empresaId, aoAtualizar, aoErro) {
+  verificarConfiguracao();
+  const referencia = collection(banco, 'empresas', empresaId, 'clientes');
+  return onSnapshot(referencia, (snapshot) => {
+    aoAtualizar(snapshot.docs.map((documento) => ({ id: documento.id, ...documento.data() })));
+  }, aoErro);
+}
+
+export async function atualizarClienteAtivo(empresaId, clienteId, ativo) {
+  verificarConfiguracao();
+  await updateDoc(doc(banco, 'empresas', empresaId, 'clientes', clienteId), { ativo });
+}
+
 export function observarPiscinas(empresaId, aoAtualizar, aoErro) {
   verificarConfiguracao();
   const referencia = collection(banco, 'empresas', empresaId, 'piscinas');
@@ -316,6 +329,7 @@ export async function salvarPiscina(empresaId, usuarioId, dados) {
 
   lote.set(cliente, {
     nome: dados.cliente,
+    ativo: true,
     criadaPorUid: usuarioId,
     criadaEm: new Date().toISOString(),
   });
