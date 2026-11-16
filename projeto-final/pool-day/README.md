@@ -23,6 +23,10 @@ O cadastro inicial cria o responsável e uma nova empresa em uma única operaç�
 
 O envio usa o e-mail de redefinição de senha do Firebase Authentication e está sujeito aos limites do plano Firebase em uso. Não é necessário publicar Cloud Functions para cadastrar um tratador.
 
+## Navegação do aplicativo
+
+O aplicativo tem abas na parte inferior. O responsável acessa Início, Locais, Visitas e Equipe. O tratador acessa Início e Minhas visitas. O cadastro de locais, o convite da equipe e o acompanhamento das visitas ficam em telas separadas.
+
 ## Documentação
 
 - [Modelo de empresas e usuários](docs/modelo-empresas-usuarios.md)

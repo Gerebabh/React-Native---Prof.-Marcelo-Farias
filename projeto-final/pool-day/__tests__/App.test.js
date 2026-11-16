@@ -116,6 +116,9 @@ describe('cadastro de cliente e visitas', () => {
   });
 
   async function preencherLocal(tela, { cliente = 'Casa da família', endereco = 'Rua das Flores, 10', piscina = true, litragem = '13000' } = {}) {
+    const estavaEmVisitas = !tela.queryByPlaceholderText('Cliente');
+    if (estavaEmVisitas) await fireEvent.press(tela.getByRole('tab', { name: 'Locais' }));
+
     const { getByPlaceholderText, getByText, getByRole } = tela;
     await fireEvent.changeText(getByPlaceholderText('Cliente'), cliente);
     await fireEvent.changeText(getByPlaceholderText('Endereço'), endereco);
@@ -126,6 +129,26 @@ describe('cadastro de cliente e visitas', () => {
     if (cliente.trim() && endereco.trim() && piscina && volumeValido) {
       await waitFor(() => expect(Firebase.salvarPiscina).toHaveBeenCalled());
     }
+
+    if (estavaEmVisitas) await fireEvent.press(tela.getByRole('tab', { name: 'Visitas' }));
+  }
+
+  async function renderNaAba(elemento, nomeAba) {
+    const tela = await render(elemento);
+    await fireEvent.press(tela.getByRole('tab', { name: nomeAba }));
+    return tela;
+  }
+
+  async function renderLocais(elemento = <App />) {
+    return renderNaAba(elemento, 'Locais');
+  }
+
+  async function renderEquipe(elemento = <App />) {
+    return renderNaAba(elemento, 'Equipe');
+  }
+
+  async function renderVisitas(elemento = <App />) {
+    return renderNaAba(elemento, mockSessao.papel === 'tratador' ? 'Minhas visitas' : 'Visitas');
   }
 
   test('mostra o nome do aplicativo', async () => {
@@ -133,9 +156,35 @@ describe('cadastro de cliente e visitas', () => {
     expect(getByText('Pool Day')).toBeTruthy();
   });
 
+  test('responsável navega entre visitas, locais e equipe pelas abas inferiores', async () => {
+    const tela = await render(<App />);
+
+    expect(tela.getByRole('tab', { name: 'Início' })).toBeTruthy();
+    expect(tela.getByRole('tab', { name: 'Locais' })).toBeTruthy();
+    expect(tela.getByRole('tab', { name: 'Visitas' })).toBeTruthy();
+    expect(tela.getByRole('tab', { name: 'Equipe' })).toBeTruthy();
+    expect(tela.getByText('Próximas visitas')).toBeTruthy();
+
+    await fireEvent.press(tela.getByRole('tab', { name: 'Locais' }));
+    expect(tela.getByPlaceholderText('Cliente')).toBeTruthy();
+    expect(tela.queryByText('Próximas visitas')).toBeNull();
+
+    await fireEvent.press(tela.getByRole('tab', { name: 'Equipe' }));
+    expect(tela.getByPlaceholderText('Nome do tratador')).toBeTruthy();
+  });
+
+  test('início permite acessar as visitas rapidamente', async () => {
+    const tela = await render(<App />);
+    await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
+
+    expect(tela.getByText('Acompanhe seus atendimentos e organize a rotina da piscina.')).toBeTruthy();
+    await fireEvent.press(tela.getByRole('button', { name: 'Ver visitas' }));
+    expect(tela.getByText('Próximas visitas')).toBeTruthy();
+  });
+
   test.each(['Cliente', 'Endereço', 'Tipo de piscina', 'Litragem em litros (ex.: 13000)'])(
     'exige o campo %s', async (campo) => {
-      const tela = await render(<App />);
+      const tela = await renderLocais();
       await preencherLocal(tela, {
         cliente: campo === 'Cliente' ? '' : 'Casa da família',
         endereco: campo === 'Endereço' ? '' : 'Rua das Flores, 10',
@@ -147,13 +196,13 @@ describe('cadastro de cliente e visitas', () => {
   );
 
   test.each(['0', '-500', 'abc', '13.5'])('não aceita litragem inválida "%s"', async (litragem) => {
-    const tela = await render(<App />);
+    const tela = await renderLocais();
     await preencherLocal(tela, { litragem });
     expect(alerta).toHaveBeenCalledWith('Litragem inválida', 'Informe uma litragem inteira maior que zero.');
   });
 
   test('salva cliente, endereço e tipo de piscina', async () => {
-    const tela = await render(<App />);
+    const tela = await renderLocais();
     await preencherLocal(tela);
     expect(tela.getByText('Residência cadastrada')).toBeTruthy();
     expect(tela.getByText('Casa da família')).toBeTruthy();
@@ -161,13 +210,14 @@ describe('cadastro de cliente e visitas', () => {
   });
 
   test('responsável consegue convidar tratador pelo nome e e-mail', async () => {
-    const tela = await render(<App />);
+    const tela = await renderEquipe();
     await fireEvent.changeText(tela.getByPlaceholderText('Nome do tratador'), 'Joana Lima');
     await fireEvent.changeText(tela.getByPlaceholderText('E-mail do tratador'), 'joana@poolday.com');
     await fireEvent.press(tela.getByRole('button', { name: 'Convidar tratador' }));
 
     await waitFor(() => expect(Firebase.convidarTratador).toHaveBeenCalledWith('empresa-teste', 'Joana Lima', 'joana@poolday.com'));
-    expect(tela.getByText('Joana • joana@poolday.com')).toBeTruthy();
+    expect(tela.getByText('Joana')).toBeTruthy();
+    expect(tela.getByText('joana@poolday.com')).toBeTruthy();
   });
 
   test('permite reenviar o e-mail quando a conta foi criada mas o convite falhou', async () => {
@@ -175,7 +225,7 @@ describe('cadastro de cliente e visitas', () => {
       conviteCriado: true,
       email: 'joana@poolday.com',
     }));
-    const tela = await render(<App />);
+    const tela = await renderEquipe();
     await fireEvent.changeText(tela.getByPlaceholderText('Nome do tratador'), 'Joana Lima');
     await fireEvent.changeText(tela.getByPlaceholderText('E-mail do tratador'), 'joana@poolday.com');
     await fireEvent.press(tela.getByRole('button', { name: 'Convidar tratador' }));
@@ -194,9 +244,12 @@ describe('cadastro de cliente e visitas', () => {
 
   test('tratador não vê os formulários de cadastro e convite da equipe', async () => {
     mockSessao.papel = 'tratador';
-    const tela = await render(<App visitasIniciais={[]} />);
+    const tela = await renderVisitas(<App visitasIniciais={[]} />);
 
-    expect(tela.getByText('Minhas visitas')).toBeTruthy();
+    expect(tela.getByRole('tab', { name: 'Minhas visitas' })).toBeTruthy();
+    expect(tela.queryByRole('tab', { name: 'Locais' })).toBeNull();
+    expect(tela.queryByRole('tab', { name: 'Equipe' })).toBeNull();
+    expect(tela.getAllByText('Minhas visitas')).toHaveLength(2);
     expect(tela.queryByText('Dados do local')).toBeNull();
     expect(tela.queryByText('Equipe de tratadores')).toBeNull();
     expect(tela.queryByRole('button', { name: 'Adicionar visita' })).toBeNull();

@@ -1,14 +1,16 @@
 import { cores } from './styles/colors';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import VisitasLista from './components/VisitasLista';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Autenticacao from './components/Autenticacao';
+import NavegacaoInferior from './components/NavegacaoInferior';
+import TelaEquipe from './components/TelaEquipe';
+import TelaInicio from './components/TelaInicio';
+import TelaLocais from './components/TelaLocais';
+import TelaVisitas from './components/TelaVisitas';
 import {
   atualizarVisita,
   convidarTratador,
@@ -36,11 +38,22 @@ export default function App(props) {
 
 function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const responsavel = perfil.papel === 'responsavel';
+  const abas = responsavel
+    ? [
+      { id: 'inicio', titulo: 'Início' },
+      { id: 'locais', titulo: 'Locais' },
+      { id: 'visitas', titulo: 'Visitas' },
+      { id: 'equipe', titulo: 'Equipe' },
+    ]
+    : [
+      { id: 'inicio', titulo: 'Início' },
+      { id: 'visitas', titulo: 'Minhas visitas' },
+    ];
+  const [abaSelecionada, setAbaSelecionada] = useState('visitas');
   const [cliente, setCliente] = useState('');
   const [endereco, setEndereco] = useState('');
   const [tipoPiscina, setTipoPiscina] = useState('');
   const [litragem, setLitragem] = useState('');
-  const [residencia, setResidencia] = useState(null);
   const [piscinas, setPiscinas] = useState([]);
   const [tratadores, setTratadores] = useState([]);
   const [tratadorUid, setTratadorUid] = useState('');
@@ -59,7 +72,6 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
 
     const cancelarPiscinas = observarPiscinas(perfil.empresaId, (lista) => {
       setPiscinas(lista);
-      setResidencia((atual) => atual || lista[0] || null);
     }, () => Alert.alert('Erro', 'Não foi possível carregar os locais da empresa.'));
     const cancelarVisitas = observarVisitas(
       perfil.empresaId,
@@ -105,7 +117,6 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     try {
       const piscina = await salvarPiscina(perfil.empresaId, usuario.uid, dadosPiscina);
       setPiscinas((lista) => lista.some((item) => item.id === piscina.id) ? lista : [...lista, piscina]);
-      setResidencia(piscina);
       setLocalVisitaId(piscina.id);
     } catch (erro) {
       Alert.alert('Não foi possível salvar', 'Confira sua conexão e tente salvar o local novamente.');
@@ -165,6 +176,11 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     setServico('');
     setOrientacao('');
     setTratadorUid('');
+  }
+
+  function selecionarDataVisita(dataSelecionada) {
+    if (dataSelecionada) setDataVisita(dataSelecionada);
+    setMostrarCalendario(false);
   }
 
   async function atualizarDadosVisita(id, dados) {
@@ -401,91 +417,60 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     atualizarDadosVisita(id, { [campoFoto]: uri });
   }
 
+  const abaAtual = abas.some((aba) => aba.id === abaSelecionada) ? abaSelecionada : 'inicio';
+
   return (
     <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <StatusBar style="light" />
-
       <View style={styles.cabecalho}>
-        <Text style={styles.titulo}>Pool Day</Text>
-        <Text style={styles.subtitulo}>Tratamento e visitas programadas</Text>
-        <Text style={styles.infoConta}>{perfil.nomeEmpresa} • {perfil.nome || usuario.email}</Text>
+        <View>
+          <Text style={styles.titulo}>Pool Day</Text>
+          <Text style={styles.subtitulo}>Tratamento e visitas programadas</Text>
+          <Text style={styles.infoConta}>{perfil.nomeEmpresa} • {perfil.nome || usuario.email}</Text>
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Sair da conta" onPress={aoSair} style={styles.botaoSair}>
-          <Text style={styles.textoBotaoSair}>Sair da conta</Text>
+          <Text style={styles.textoBotaoSair}>Sair</Text>
         </Pressable>
       </View>
 
-      {responsavel && (
-        <View style={styles.formulario}>
-          <Text style={styles.tituloSecao}>Dados do local</Text>
-          <TextInput accessibilityLabel="Cliente" style={styles.campo} placeholder="Cliente" value={cliente} onChangeText={setCliente} />
-          <TextInput accessibilityLabel="Endereço" style={styles.campo} placeholder="Endereço" value={endereco} onChangeText={setEndereco} />
-          <Text style={styles.rotulo}>Tipo de piscina</Text>
-          <View style={styles.seletor}><Picker selectedValue={tipoPiscina} onValueChange={setTipoPiscina}><Picker.Item label="Selecione o tipo" value="" /><Picker.Item label="Fibra" value="Fibra" /><Picker.Item label="Vinil" value="Vinil" /><Picker.Item label="Alvenaria" value="Alvenaria" /><Picker.Item label="Outros" value="Outros" /></Picker></View>
-          <TextInput accessibilityLabel="Litragem em litros (ex.: 13000)" style={styles.campo} placeholder="Litragem em litros (ex.: 13000)" keyboardType="numeric" value={litragem} onChangeText={setLitragem} />
-          <Pressable accessibilityRole="button" onPress={salvarResidencia} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
-            <Text style={styles.textoBotao}>Salvar residência</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {responsavel && residencia && (
-        <View style={styles.cartaoResidencia}>
-          <Text style={styles.tituloCartao}>Residência cadastrada</Text>
-          <Text style={styles.nomeResidencia}>{residencia.cliente}</Text>
-          <Text style={styles.dadoResidencia}>Endereço: {residencia.endereco}</Text>
-          <Text style={styles.dadoResidencia}>Piscina de {residencia.tipoPiscina} • {residencia.litragem} L</Text>
-        </View>
-      )}
-
-      {responsavel && (
-        <View style={styles.formulario}>
-          <Text style={styles.tituloSecao}>Equipe de tratadores</Text>
-          <TextInput accessibilityLabel="Nome do tratador" style={styles.campo} placeholder="Nome do tratador" value={nomeTratador} onChangeText={setNomeTratador} />
-          <TextInput accessibilityLabel="E-mail do tratador" style={styles.campo} placeholder="E-mail do tratador" keyboardType="email-address" autoCapitalize="none" value={emailTratador} onChangeText={setEmailTratador} />
-          <Pressable accessibilityRole="button" onPress={enviarConvite} disabled={enviandoConvite} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado, enviandoConvite && styles.botaoDesativado]}>
-            <Text style={styles.textoBotao}>{enviandoConvite ? 'Enviando convite...' : 'Convidar tratador'}</Text>
-          </Pressable>
-          {tratadores.map((item) => <Text key={item.id} style={styles.dadoResidencia}>{item.nome} • {item.email}</Text>)}
-          {tratadores.length === 0 && <Text style={styles.dadoResidencia}>Nenhum tratador cadastrado.</Text>}
-        </View>
-      )}
-
-      <View style={styles.secaoVisitas}>
-        <Text style={styles.tituloSecao}>{responsavel ? 'Próximas visitas' : 'Minhas visitas'}</Text>
-        {responsavel && (
-          <>
-            <Text style={styles.rotulo}>Local / piscina</Text>
-            <View style={styles.seletor}>
-              <Picker selectedValue={localVisitaId} onValueChange={setLocalVisitaId}>
-                <Picker.Item label={piscinas.length ? 'Selecione o local' : 'Cadastre um local primeiro'} value="" />
-                {piscinas.map((item) => <Picker.Item key={item.id} label={`${item.cliente} — ${item.endereco}`} value={item.id} />)}
-              </Picker>
-            </View>
-            <Text style={styles.rotulo}>Tratador responsável</Text>
-            <View style={styles.seletor}>
-              <Picker selectedValue={tratadorUid} onValueChange={setTratadorUid}>
-                <Picker.Item label={tratadores.length ? 'Selecione o tratador' : 'Convide um tratador primeiro'} value="" />
-                {tratadores.map((item) => <Picker.Item key={item.id} label={item.nome || item.email} value={item.id} />)}
-              </Picker>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Selecionar data da visita" onPress={() => setMostrarCalendario(true)} style={styles.campoData}>
-              <Text style={dataVisita ? styles.textoData : styles.placeholderData}>{dataVisita ? formatarData(dataVisita) : 'Data da visita'}</Text>
-            </Pressable>
-            {mostrarCalendario && <DateTimePicker value={dataVisita || new Date()} minimumDate={inicioDoDia(new Date())} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onValueChange={(_evento, dataSelecionada) => { setDataVisita(dataSelecionada); setMostrarCalendario(false); }} onDismiss={() => setMostrarCalendario(false)} />}
-            <Text style={styles.rotulo}>Tipo de serviço</Text>
-            <View style={styles.seletor}><Picker selectedValue={servico} onValueChange={setServico}><Picker.Item label="Selecione o serviço" value="" /><Picker.Item label="Aplicar produtos" value="Aplicar produtos" /><Picker.Item label="Aspiração - Liberar o uso" value="Aspiração - Liberar o uso" /><Picker.Item label="Inspeção" value="Inspeção" /></Picker></View>
-            {servico === 'Aplicar produtos' && <TextInput style={styles.campo} placeholder="Orientação de produtos" value={orientacao} onChangeText={setOrientacao} />}
-            <Pressable accessibilityRole="button" onPress={adicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.botaoPressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
-              <Text style={styles.textoBotao}>Adicionar visita</Text>
-            </Pressable>
-          </>
+      <View style={styles.conteudo}>
+        {abaAtual === 'inicio' && (
+          <TelaInicio nome={perfil.nome || usuario.email} empresa={perfil.nomeEmpresa} aoAbrirVisitas={() => setAbaSelecionada('visitas')} />
         )}
-        <VisitasLista visitas={visitas} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada} onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita} onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} />
+        {abaAtual === 'locais' && responsavel && (
+          <ScrollArea>
+            <TelaLocais
+              cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas}
+              onCliente={setCliente} onEndereco={setEndereco} onTipoPiscina={setTipoPiscina} onLitragem={setLitragem} onSalvar={salvarResidencia}
+            />
+          </ScrollArea>
+        )}
+        {abaAtual === 'equipe' && responsavel && (
+          <ScrollArea>
+            <TelaEquipe nome={nomeTratador} email={emailTratador} tratadores={tratadores} enviando={enviandoConvite} onNome={setNomeTratador} onEmail={setEmailTratador} onConvidar={enviarConvite} />
+          </ScrollArea>
+        )}
+        {abaAtual === 'visitas' && (
+          <TelaVisitas
+            responsavel={responsavel} piscinas={piscinas} tratadores={tratadores} visitas={visitas}
+            localVisitaId={localVisitaId} tratadorUid={tratadorUid} dataVisita={dataVisita} mostrarCalendario={mostrarCalendario}
+            servico={servico} orientacao={orientacao} onLocal={setLocalVisitaId} onTratador={setTratadorUid}
+            onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
+            onFecharCalendario={() => setMostrarCalendario(false)} onServico={setServico} onOrientacao={setOrientacao}
+            onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
+            onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita}
+            onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita}
+          />
+        )}
       </View>
-    </ScrollView>
+
+      <NavegacaoInferior abas={abas} abaAtual={abaAtual} aoSelecionar={setAbaSelecionada} />
     </KeyboardAvoidingView>
   );
+}
+
+function ScrollArea({ children }) {
+  return <ScrollView style={styles.areaRolavel} contentContainerStyle={styles.conteudoRolavel} keyboardShouldPersistTaps="handled">{children}</ScrollView>;
 }
 
 function formatarData(data) {
@@ -501,29 +486,13 @@ function inicioDoDia(data) {
 const styles = StyleSheet.create({
   areaSegura: { flex: 1, backgroundColor: cores.fundoTela },
   teclado: { flex: 1 },
-  container: { flexGrow: 1, backgroundColor: cores.fundoTela, padding: 20, paddingTop: 16 },
-  cabecalho: { backgroundColor: cores.azulEscuro, borderRadius: 14, marginBottom: 20, padding: 20 },
+  cabecalho: { alignItems: 'center', backgroundColor: cores.azulEscuro, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
   titulo: { color: cores.branco, fontSize: 30, fontWeight: '700' },
-  subtitulo: { color: cores.azulClaro, fontSize: 15, marginTop: 6 },
-  infoConta: { color: cores.azulClaro, fontSize: 13, marginTop: 14 },
-  botaoSair: { alignSelf: 'flex-start', borderColor: cores.azulClaro, borderRadius: 7, borderWidth: 1, marginTop: 10, paddingHorizontal: 11, paddingVertical: 7 },
+  subtitulo: { color: cores.azulClaro, fontSize: 14, marginTop: 2 },
+  infoConta: { color: cores.azulClaro, fontSize: 12, marginTop: 7 },
+  botaoSair: { borderColor: cores.azulClaro, borderRadius: 7, borderWidth: 1, marginLeft: 8, paddingHorizontal: 12, paddingVertical: 8 },
   textoBotaoSair: { color: cores.branco, fontSize: 13, fontWeight: '600' },
-  formulario: { backgroundColor: cores.branco, borderRadius: 14, padding: 18 },
-  tituloSecao: { color: cores.azulEscuro, fontSize: 19, fontWeight: '600', marginBottom: 12 },
-  rotulo: { color: cores.textoSecundario, fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  seletor: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
-  campo: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, fontSize: 16, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 11 },
-  campoData: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, justifyContent: 'center', marginBottom: 12, minHeight: 46, paddingHorizontal: 12 },
-  placeholderData: { color: cores.cinza, fontSize: 16 },
-  textoData: { color: cores.texto, fontSize: 16 },
-  botao: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 8, marginTop: 4, overflow: 'hidden', padding: 14 },
-  botaoPressionado: { opacity: 0.85 },
-  botaoDesativado: { opacity: 0.6 },
-  textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '600' },
-  cartaoResidencia: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 14, borderWidth: 1, marginTop: 20, padding: 18 },
-  tituloCartao: { color: cores.azulEscuro, fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  nomeResidencia: { color: cores.texto, fontSize: 17, fontWeight: '600', marginBottom: 4 },
-  dadoResidencia: { color: cores.textoSecundario, fontSize: 15, marginTop: 4 },
-  secaoVisitas: { backgroundColor: cores.branco, borderRadius: 14, marginTop: 24, padding: 18 },
-  cartao: { backgroundColor: cores.branco, borderRadius: 10, marginTop: 10, padding: 16 },
+  conteudo: { flex: 1, backgroundColor: cores.fundoTela },
+  areaRolavel: { flex: 1 },
+  conteudoRolavel: { flexGrow: 1 },
 });
