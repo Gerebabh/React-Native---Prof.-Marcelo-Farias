@@ -29,6 +29,8 @@ O aplicativo tem abas na parte inferior. O responsável acessa Início, Clientes
 
 Na tela Início, o responsável acompanha clientes ativos, visitas agendadas para hoje e funcionários, com atalhos para as áreas correspondentes. O cadastro de cliente, o agendamento de visita e o convite de tratador aparecem ao tocar em seus botões; as telas mostram os registros antes dos formulários. A lista de clientes pode ser pesquisada. Clientes começam ativos e podem ser ativados ou desativados na tela Clientes. O responsável pode atribuir uma visita a si mesmo quando trabalha sem tratadores. Na tela Equipe, o responsável pode abrir a agenda de cada tratador; cada tratador acessa somente as próprias visitas.
 
+Na tela Clientes, cada piscina permite configurar um padrão de tratamento normal (sem choque), com quantidades e unidades informadas pelo responsável para os produtos usados. Ao selecionar “Aplicar produtos” em uma visita, o padrão da piscina é carregado no campo de orientação e pode ser ajustado para aquele atendimento. O aplicativo não define dosagens; elas devem seguir as instruções dos produtos.
+
 ## Documentação
 
 - [Modelo de empresas e usuários](docs/modelo-empresas-usuarios.md)

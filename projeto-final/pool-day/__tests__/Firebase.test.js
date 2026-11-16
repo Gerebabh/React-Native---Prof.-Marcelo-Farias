@@ -126,6 +126,18 @@ describe('serviço Firebase', () => {
     expect(firestore.updateDoc).toHaveBeenCalledWith('empresas/empresa-1/clientes/cliente-1', { ativo: false });
   });
 
+  test('salva o padrão de tratamento no documento da piscina', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    const dados = {
+      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      orientacoesTratamento: 'Seguir o rótulo.',
+    };
+
+    await firebase.atualizarTratamentoPadrao('empresa-1', 'piscina-1', dados);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith('empresas/empresa-1/piscinas/piscina-1', dados);
+  });
+
   test('cria cliente novo com status ativo', async () => {
     const { firebase, firestore } = carregarFirebase();
 

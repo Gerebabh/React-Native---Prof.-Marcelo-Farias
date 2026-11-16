@@ -11,8 +11,10 @@ import TelaEquipe from './components/TelaEquipe';
 import TelaInicio from './components/TelaInicio';
 import TelaLocais from './components/TelaLocais';
 import TelaVisitas from './components/TelaVisitas';
+import { montarOrientacaoTratamento } from './components/dadosTratamento';
 import {
   atualizarClienteAtivo,
+  atualizarTratamentoPadrao,
   atualizarVisita,
   convidarTratador,
   enviarRecuperacaoSenha,
@@ -165,6 +167,17 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     }
   }
 
+  async function salvarTratamentoPadrao(piscinaId, dados) {
+    try {
+      await atualizarTratamentoPadrao(perfil.empresaId, piscinaId, dados);
+      setPiscinas((lista) => lista.map((piscina) => piscina.id === piscinaId ? { ...piscina, ...dados } : piscina));
+      return true;
+    } catch (erro) {
+      Alert.alert('Não foi possível salvar', 'Confira sua conexão e tente salvar o padrão de tratamento novamente.');
+      return false;
+    }
+  }
+
   function cadastrarClienteAntesDaVisita() {
     setRetornarParaVisitas(true);
     setMostrarFormularioCliente(clientes.length === 0 && piscinas.length === 0);
@@ -250,6 +263,24 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   function selecionarDataVisita(dataSelecionada) {
     if (dataSelecionada) setDataVisita(dataSelecionada);
     setMostrarCalendario(false);
+  }
+
+  function selecionarLocalVisita(piscinaId) {
+    setLocalVisitaId(piscinaId);
+    if (servico === 'Aplicar produtos') {
+      const piscina = piscinas.find((item) => item.id === piscinaId);
+      setOrientacao(montarOrientacaoTratamento(piscina));
+    }
+  }
+
+  function selecionarServico(servicoSelecionado) {
+    setServico(servicoSelecionado);
+    if (servicoSelecionado === 'Aplicar produtos') {
+      const piscina = piscinas.find((item) => item.id === localVisitaId);
+      setOrientacao(montarOrientacaoTratamento(piscina));
+    } else {
+      setOrientacao('');
+    }
   }
 
   async function atualizarDadosVisita(id, dados) {
@@ -529,7 +560,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
               cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas} clientes={clientes}
               mostrarFormulario={mostrarFormularioCliente} onMostrarFormulario={() => setMostrarFormularioCliente(true)} onCancelarFormulario={cancelarCadastroDeCliente}
               onCliente={setCliente} onEndereco={setEndereco} onTipoPiscina={setTipoPiscina} onLitragem={setLitragem} onSalvar={salvarResidencia}
-              onAlternarCliente={alternarClienteAtivo}
+              onAlternarCliente={alternarClienteAtivo} onSalvarTratamento={salvarTratamentoPadrao}
             />
           </ScrollArea>
         )}
@@ -545,9 +576,9 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             piscinas={piscinasAtivas} tratadores={tratadores} visitas={visitas}
             localVisitaId={localVisitaId} tratadorUid={tratadorUid} dataVisita={dataVisita} mostrarCalendario={mostrarCalendario}
             mostrarFormulario={mostrarFormularioVisita}
-            servico={servico} orientacao={orientacao} onLocal={setLocalVisitaId} onTratador={setTratadorUid}
+            servico={servico} orientacao={orientacao} onLocal={selecionarLocalVisita} onTratador={setTratadorUid}
             onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
-            onFecharCalendario={() => setMostrarCalendario(false)} onServico={setServico} onOrientacao={setOrientacao}
+            onFecharCalendario={() => setMostrarCalendario(false)} onServico={selecionarServico} onOrientacao={setOrientacao}
             onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
             onAbrirFormulario={() => setMostrarFormularioVisita(true)} onCancelarFormulario={() => setMostrarFormularioVisita(false)}
             onCadastrarCliente={cadastrarClienteAntesDaVisita}

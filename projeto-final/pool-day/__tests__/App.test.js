@@ -19,6 +19,7 @@ const fireEvent = {
 
 jest.mock('../services/firebase', () => ({
   atualizarClienteAtivo: jest.fn(async () => {}),
+  atualizarTratamentoPadrao: jest.fn(async () => {}),
   atualizarVisita: jest.fn(async () => {}),
   convidarTratador: jest.fn(async () => ({})),
   enviarRecuperacaoSenha: jest.fn(async () => {}),
@@ -418,6 +419,54 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByRole('button', { name: 'Desativar cliente: Casa da família' })).toBeTruthy();
   });
 
+  test('responsável configura as quantidades do tratamento normal da piscina', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{
+        id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10',
+        tipoPiscina: 'Fibra', litragem: 13000,
+      }]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Clientes');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Configurar padrão' }));
+    expect(tela.getByText('Tratamento normal (sem choque)')).toBeTruthy();
+    await fireEvent.changeText(tela.getByLabelText('Quantidade de Cloro'), '120');
+    await fireEvent.changeText(tela.getByLabelText('Unidade de Cloro'), 'g');
+    await fireEvent.changeText(tela.getByLabelText('Observações do tratamento padrão'), 'Seguir as instruções do rótulo.');
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar padrão' }));
+
+    await waitFor(() => expect(Firebase.atualizarTratamentoPadrao).toHaveBeenCalledWith('empresa-teste', 'piscina-1', {
+      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      orientacoesTratamento: 'Seguir as instruções do rótulo.',
+    }));
+    expect(tela.getByText('Cloro: 120 g')).toBeTruthy();
+    expect(tela.getByText('Seguir as instruções do rótulo.')).toBeTruthy();
+  });
+
+  test('não salva padrão com quantidade sem unidade ou valor inválido', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10' }]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Clientes');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Configurar padrão' }));
+    await fireEvent.changeText(tela.getByLabelText('Quantidade de Cloro'), 'zero');
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar padrão' }));
+
+    expect(alerta).toHaveBeenCalledWith('Quantidade inválida', expect.stringContaining('Cloro'));
+    expect(Firebase.atualizarTratamentoPadrao).not.toHaveBeenCalled();
+  });
+
   test('responsável consegue convidar tratador pelo nome e e-mail', async () => {
     const tela = await renderEquipe();
     await fireEvent.changeText(tela.getByPlaceholderText('Nome do tratador'), 'Joana Lima');
@@ -534,6 +583,33 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByText('Aplicar produtos'));
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
     expect(alerta).toHaveBeenCalledWith('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
+  });
+
+  test('preenche orientação de aplicar produtos com o padrão salvo na piscina', async () => {
+    const piscina = {
+      id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10',
+      tipoPiscina: 'Fibra', litragem: 13000,
+      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      orientacoesTratamento: 'Seguir as instruções do rótulo.',
+    };
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([piscina]); return jest.fn(); });
+    const tela = await render(<App />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar serviço' }));
+    await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
+    await fireEvent.press(tela.getByText('Aplicar produtos'));
+
+    expect(tela.getByLabelText('Orientação de produtos').props.value).toBe('Cloro: 120 g\nSeguir as instruções do rótulo.');
+    await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
+    await fireEvent.press(tela.getByText('Selecionar no calendário'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
+    await waitFor(() => expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
+      orientacao: 'Cloro: 120 g\nSeguir as instruções do rótulo.',
+    })));
   });
 
   test.each(['Executada', 'Frustrada', 'Não realizada'])(
