@@ -57,13 +57,34 @@ async function prepararDocumentos() {
       [caminhoEmpresa(empresaA, 'clientes', 'cliente-a'), { nome: 'Cliente A' }],
       [caminhoEmpresa(empresaB, 'clientes', 'cliente-b'), { nome: 'Cliente B' }],
       [caminhoEmpresa(empresaA, 'piscinas', 'piscina-a'), { cliente: 'Casa A', litragem: 13000 }],
+      [caminhoEmpresa(empresaA, 'produtos', 'cloro'), { nome: 'Cloro', marca: 'HidroAll', valorUnitarioUltimaCompra: 8.67, quantidadeEstoque: 500, unidade: 'g', criadoEm: '2026-11-15', atualizadoEm: '2026-11-15' }],
+      [caminhoEmpresa(empresaA, 'produtos', 'cloro-kg'), { nome: 'Cloro em kg', valorUnitarioUltimaCompra: 50, quantidadeEstoque: 10, unidade: 'kg', criadoEm: '2026-11-15', atualizadoEm: '2026-11-15' }],
+      [caminhoEmpresa(empresaB, 'produtos', 'cloro-b'), { nome: 'Cloro B', valorUnitarioUltimaCompra: 8.67, quantidadeEstoque: 200, unidade: 'g', criadoEm: '2026-11-15', atualizadoEm: '2026-11-15' }],
       [caminhoEmpresa(empresaB, 'visitas', 'visita-empresa-b'), {
         localId: 'local-b', piscinaId: 'piscina-b', tratadorUid: 'tratador-b',
         status: 'Pendente', servico: 'Inspeção',
       }],
       [caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'), {
         localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA,
-        status: 'Pendente', servico: 'Inspeção',
+        status: 'Pendente', servico: 'Inspeção', produtosAplicados: {},
+      }],
+      [caminhoEmpresa(empresaA, 'visitas', 'visita-aplicar'), {
+        localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA,
+        status: 'Pendente', servico: 'Aplicar produtos',
+        produtosAplicados: { cloro: { produto: 'Cloro', quantidade: 125, unidade: 'g' } },
+        estoqueBaixado: false,
+      }],
+      [caminhoEmpresa(empresaA, 'visitas', 'visita-excede-estoque'), {
+        localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA,
+        status: 'Pendente', servico: 'Aplicar produtos',
+        produtosAplicados: { cloro: { produto: 'Cloro', quantidade: 600, unidade: 'g' } },
+        estoqueBaixado: false,
+      }],
+      [caminhoEmpresa(empresaA, 'visitas', 'visita-dose-gramas'), {
+        localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA,
+        status: 'Pendente', servico: 'Aplicar produtos',
+        produtosAplicados: { 'cloro-kg': { produto: 'Cloro em kg', quantidade: 60, unidade: 'g' } },
+        estoqueBaixado: false,
       }],
       [caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a2'), {
         localId: 'local-a', piscinaId: 'piscina-a', tratadorUid: usuarioTratadorA2,
@@ -158,6 +179,78 @@ describe('regras de acesso por empresa e papel', () => {
     await assertFails(deleteDoc(cliente));
   });
 
+  test('responsável gerencia catálogo; empresas não acessam estoque umas das outras', async () => {
+    const bancoResponsavel = firestoreDo(usuarioResponsavelA);
+    const bancoTratador = firestoreDo(usuarioTratadorA);
+    const produto = doc(bancoResponsavel, caminhoEmpresa(empresaA, 'produtos', 'cloro'));
+    const novoProduto = doc(bancoResponsavel, caminhoEmpresa(empresaA, 'produtos', 'alcalinizante'));
+
+    await assertSucceeds(getDoc(produto));
+    await assertSucceeds(setDoc(novoProduto, {
+      nome: 'Alcalinizante', quantidadeEstoque: 2, unidade: 'kg', valorUnitarioUltimaCompra: 17.5, criadoEm: 'agora', atualizadoEm: 'agora',
+    }));
+    await assertSucceeds(setDoc(doc(bancoResponsavel, caminhoEmpresa(empresaA, 'produtos', 'pastilha')), {
+      nome: 'Pastilha de Cloro 5x1', marca: 'HidroAll', quantidadeEstoque: 4, unidade: 'UN',
+      valorUnitarioUltimaCompra: 8.67, criadoEm: 'agora', atualizadoEm: 'agora',
+    }));
+    await assertFails(setDoc(doc(bancoResponsavel, caminhoEmpresa(empresaA, 'produtos', 'sem-preco')), {
+      nome: 'Produto sem preço', quantidadeEstoque: 1, unidade: 'UN', criadoEm: 'agora', atualizadoEm: 'agora',
+    }));
+    await assertSucceeds(updateDoc(produto, { quantidadeEstoque: 700, atualizadoEm: 'agora' }));
+    await assertSucceeds(getDoc(doc(bancoTratador, caminhoEmpresa(empresaA, 'produtos', 'cloro'))));
+    await assertFails(updateDoc(doc(bancoTratador, caminhoEmpresa(empresaA, 'produtos', 'cloro')), { quantidadeEstoque: 900 }));
+    await assertFails(getDoc(doc(bancoResponsavel, caminhoEmpresa(empresaB, 'produtos', 'cloro-b'))));
+  });
+
+  test('tratador baixa o estoque somente ao concluir visita atribuída e sem exceder consumo', async () => {
+    const banco = firestoreDo(usuarioTratadorA);
+    const produto = doc(banco, caminhoEmpresa(empresaA, 'produtos', 'cloro'));
+    const visita = doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-aplicar'));
+    const lote = writeBatch(banco);
+
+    lote.update(produto, {
+      quantidadeEstoque: 375, ultimaBaixaVisitaId: 'visita-aplicar', ultimaBaixaQuantidade: 125,
+    });
+    lote.update(visita, {
+      status: 'Executada', estoqueBaixado: true, estoqueBaixadoEm: 'agora',
+      custosProdutos: { cloro: { quantidadeEstoque: 125, unidadeEstoque: 'g', valorUnitario: 8.67, custoTotal: 1083.75 } },
+      custoTotalProdutos: 1083.75,
+    });
+    await assertSucceeds(lote.commit());
+
+    await assertFails(updateDoc(produto, { quantidadeEstoque: 250, ultimaBaixaVisitaId: 'visita-aplicar', ultimaBaixaQuantidade: 125 }));
+  });
+
+  test('não permite baixa de estoque que deixe saldo negativo', async () => {
+    const banco = firestoreDo(usuarioTratadorA);
+    const lote = writeBatch(banco);
+    lote.update(doc(banco, caminhoEmpresa(empresaA, 'produtos', 'cloro')), {
+      quantidadeEstoque: -100, ultimaBaixaVisitaId: 'visita-excede-estoque', ultimaBaixaQuantidade: 600,
+    });
+    lote.update(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-excede-estoque')), {
+      status: 'Executada', estoqueBaixado: true, estoqueBaixadoEm: 'agora',
+      custosProdutos: { cloro: { quantidadeEstoque: 600, unidadeEstoque: 'g', valorUnitario: 8.67, custoTotal: 5202 } },
+      custoTotalProdutos: 5202,
+    });
+
+    await assertFails(lote.commit());
+  });
+
+  test('aceita a dose em gramas e desconta o equivalente em quilogramas', async () => {
+    const banco = firestoreDo(usuarioTratadorA);
+    const lote = writeBatch(banco);
+    lote.update(doc(banco, caminhoEmpresa(empresaA, 'produtos', 'cloro-kg')), {
+      quantidadeEstoque: 9.94, ultimaBaixaVisitaId: 'visita-dose-gramas', ultimaBaixaQuantidade: 0.06,
+    });
+    lote.update(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-dose-gramas')), {
+      status: 'Executada', estoqueBaixado: true, estoqueBaixadoEm: 'agora',
+      custosProdutos: { 'cloro-kg': { quantidadeEstoque: 0.06, unidadeEstoque: 'kg', valorUnitario: 50, custoTotal: 3 } },
+      custoTotalProdutos: 3,
+    });
+
+    await assertSucceeds(lote.commit());
+  });
+
   test('tratador só consulta visitas atribuídas ao próprio UID', async () => {
     const banco = firestoreDo(usuarioTratadorA);
     const minhasVisitas = query(
@@ -166,7 +259,7 @@ describe('regras de acesso por empresa e papel', () => {
     );
 
     const resultado = await assertSucceeds(getDocs(minhasVisitas));
-    expect(resultado.size).toBe(1);
+    expect(resultado.size).toBe(4);
     await assertFails(getDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a2'))));
     await assertFails(getDocs(collection(banco, `empresas/${empresaA}/visitas`)));
   });

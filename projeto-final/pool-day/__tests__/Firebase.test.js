@@ -27,6 +27,7 @@ jest.mock('firebase/auth', () => ({
 }));
 
 jest.mock('firebase/firestore', () => ({
+  addDoc: jest.fn(async () => ({ id: 'produto-novo' })),
   collection: jest.fn((_banco, ...partes) => partes.join('/')),
   doc: jest.fn((_banco, ...partes) => partes.length
     ? partes.join('/')
@@ -37,6 +38,7 @@ jest.mock('firebase/firestore', () => ({
     aoAtualizar({ docs: [] });
     return jest.fn();
   }),
+  runTransaction: jest.fn(async (_banco, callback) => callback({ get: jest.fn(), update: jest.fn() })),
   updateDoc: jest.fn(async () => {}),
   writeBatch: jest.fn(() => ({ set: jest.fn(), commit: jest.fn(async () => {}) })),
 }));
@@ -136,6 +138,97 @@ describe('serviço Firebase', () => {
     await firebase.atualizarTratamentoPadrao('empresa-1', 'piscina-1', dados);
 
     expect(firestore.updateDoc).toHaveBeenCalledWith('empresas/empresa-1/piscinas/piscina-1', dados);
+  });
+
+  test('cadastra e atualiza produtos no estoque da empresa', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    const dados = { nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg' };
+
+    await expect(firebase.salvarProduto('empresa-1', dados)).resolves.toMatchObject({ id: 'produto-novo', ...dados });
+    await firebase.atualizarProduto('empresa-1', 'produto-novo', { ...dados, quantidadeEstoque: 8 });
+
+    expect(firestore.addDoc).toHaveBeenCalledWith('empresas/empresa-1/produtos', expect.objectContaining(dados));
+    expect(firestore.updateDoc).toHaveBeenCalledWith('empresas/empresa-1/produtos/produto-novo', expect.objectContaining({ quantidadeEstoque: 8 }));
+  });
+
+  test('baixa os produtos uma única vez e marca a visita como executada', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    firestore.runTransaction.mockImplementationOnce(async (_banco, callback) => {
+      const transacao = {
+        get: jest.fn(async (referencia) => referencia.endsWith('/visita-1')
+          ? snapshot({ status: 'Pendente', servico: 'Aplicar produtos', produtosAplicados: { cloro: { produto: 'Cloro', quantidade: 2, unidade: 'kg' } } })
+          : snapshot({ nome: 'Cloro', quantidadeEstoque: 8, unidade: 'kg', valorUnitarioUltimaCompra: 20 })),
+        update: jest.fn(),
+      };
+      const resultado = await callback(transacao);
+      expect(transacao.update).toHaveBeenNthCalledWith(1, 'empresas/empresa-1/produtos/cloro', expect.objectContaining({ quantidadeEstoque: 6 }));
+      expect(transacao.update).toHaveBeenNthCalledWith(2, 'empresas/empresa-1/visitas/visita-1', expect.objectContaining({
+        status: 'Executada', estoqueBaixado: true, custoTotalProdutos: 40,
+        custosProdutos: { cloro: expect.objectContaining({ quantidadeEstoque: 2, unidadeEstoque: 'kg', valorUnitario: 20, custoTotal: 40 }) },
+      }));
+      return resultado;
+    });
+
+    await expect(firebase.concluirVisitaComBaixaEstoque('empresa-1', 'visita-1')).resolves.toEqual(expect.objectContaining({ jaConcluida: false, estoqueBaixado: true, custoTotalProdutos: 40 }));
+  });
+
+  test('converte 60 gramas para 0,06 quilograma ao baixar o estoque', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    firestore.runTransaction.mockImplementationOnce(async (_banco, callback) => {
+      const transacao = {
+        get: jest.fn(async (referencia) => referencia.endsWith('/visita-1')
+          ? snapshot({ status: 'Pendente', servico: 'Aplicar produtos', produtosAplicados: { cloro: { produto: 'Cloro', quantidade: 60, unidade: 'g' } } })
+          : snapshot({ nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg', valorUnitarioUltimaCompra: 200 })),
+        update: jest.fn(),
+      };
+      const resultado = await callback(transacao);
+      expect(transacao.update).toHaveBeenNthCalledWith(1, 'empresas/empresa-1/produtos/cloro', expect.objectContaining({
+        quantidadeEstoque: 9.94,
+        ultimaBaixaQuantidade: 0.06,
+      }));
+      expect(transacao.update).toHaveBeenNthCalledWith(2, 'empresas/empresa-1/visitas/visita-1', expect.objectContaining({ custoTotalProdutos: 12 }));
+      return resultado;
+    });
+
+    await expect(firebase.concluirVisitaComBaixaEstoque('empresa-1', 'visita-1')).resolves.toEqual(expect.objectContaining({ jaConcluida: false, estoqueBaixado: true, custoTotalProdutos: 12 }));
+  });
+
+  test('calcula o custo de uma pastilha como uma unidade de estoque', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    firestore.runTransaction.mockImplementationOnce(async (_banco, callback) => {
+      const transacao = {
+        get: jest.fn(async (referencia) => referencia.endsWith('/visita-1')
+          ? snapshot({ status: 'Pendente', servico: 'Aplicar produtos', produtosAplicados: { pastilha: { produto: 'Pastilha de Cloro 5x1', quantidade: 1, unidade: 'UN' } } })
+          : snapshot({ nome: 'Pastilha de Cloro 5x1', quantidadeEstoque: 4, unidade: 'UN', valorUnitarioUltimaCompra: 8.67 })),
+        update: jest.fn(),
+      };
+      const resultado = await callback(transacao);
+      expect(transacao.update).toHaveBeenNthCalledWith(1, 'empresas/empresa-1/produtos/pastilha', expect.objectContaining({ quantidadeEstoque: 3 }));
+      expect(resultado.custosProdutos.pastilha.custoTotal).toBe(8.67);
+      expect(resultado.custoTotalProdutos).toBe(8.67);
+      return resultado;
+    });
+
+    await expect(firebase.concluirVisitaComBaixaEstoque('empresa-1', 'visita-1')).resolves.toEqual(expect.objectContaining({ custoTotalProdutos: 8.67 }));
+  });
+
+  test('não conclui visita quando o estoque é insuficiente ou quando já foi concluída', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    firestore.runTransaction.mockImplementationOnce(async (_banco, callback) => callback({
+      get: jest.fn(async (referencia) => referencia.endsWith('/visita-1')
+        ? snapshot({ status: 'Pendente', servico: 'Aplicar produtos', produtosAplicados: { cloro: { produto: 'Cloro', quantidade: 2, unidade: 'kg' } } })
+        : snapshot({ nome: 'Cloro', quantidadeEstoque: 1, unidade: 'kg', valorUnitarioUltimaCompra: 20 })),
+      update: jest.fn(),
+    }));
+    await expect(firebase.concluirVisitaComBaixaEstoque('empresa-1', 'visita-1')).rejects.toMatchObject({ code: 'estoque-insuficiente' });
+
+    firestore.runTransaction.mockImplementationOnce(async (_banco, callback) => callback({
+      get: jest.fn(async () => snapshot({ status: 'Executada', estoqueBaixado: true })),
+      update: jest.fn(),
+    }));
+    await expect(firebase.concluirVisitaComBaixaEstoque('empresa-1', 'visita-1')).resolves.toEqual({
+      jaConcluida: true, estoqueBaixado: true, custosProdutos: {}, custoTotalProdutos: 0,
+    });
   });
 
   test('cria cliente novo com status ativo', async () => {

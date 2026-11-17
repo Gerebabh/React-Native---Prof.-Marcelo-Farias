@@ -19,12 +19,15 @@ const fireEvent = {
 
 jest.mock('../services/firebase', () => ({
   atualizarClienteAtivo: jest.fn(async () => {}),
+  atualizarProduto: jest.fn(async () => {}),
   atualizarTratamentoPadrao: jest.fn(async () => {}),
   atualizarVisita: jest.fn(async () => {}),
+  concluirVisitaComBaixaEstoque: jest.fn(async () => ({ jaConcluida: false })),
   convidarTratador: jest.fn(async () => ({})),
   enviarRecuperacaoSenha: jest.fn(async () => {}),
   observarClientes: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarPiscinas: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
+  observarProdutos: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarTratadores: jest.fn((_empresaId, aoAtualizar) => {
     aoAtualizar([{ id: 'tratador-1', nome: 'Joana', email: 'joana@poolday.com' }]);
     return jest.fn();
@@ -33,6 +36,7 @@ jest.mock('../services/firebase', () => ({
   salvarPiscina: jest.fn(async (_empresaId, _usuarioId, dados) => ({
     id: 'piscina-1', localId: 'local-1', clienteId: 'cliente-1', ...dados,
   })),
+  salvarProduto: jest.fn(async (_empresaId, dados) => ({ id: 'produto-novo', ...dados })),
   salvarVisita: jest.fn(async () => 'visita-cloud-1'),
 }));
 
@@ -84,9 +88,9 @@ jest.mock('@react-native-community/datetimepicker', () => {
 jest.mock('@react-native-picker/picker', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
-  function Picker({ children, onValueChange }) {
+  function Picker({ children, onValueChange, ...props }) {
     const items = React.Children.toArray(children).filter(React.isValidElement);
-    return React.createElement(View, null, items.map((item) => React.cloneElement(item, { onValueChange })));
+    return React.createElement(View, props, items.map((item) => React.cloneElement(item, { onValueChange })));
   }
   Picker.Item = ({ label, value, onValueChange }) => React.createElement(Text, { onPress: () => onValueChange(value) }, label);
   return { Picker };
@@ -196,6 +200,58 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByRole('tab', { name: 'Equipe' }));
     expect(tela.getByRole('button', { name: 'Adicionar tratador' })).toBeTruthy();
     expect(tela.queryByPlaceholderText('Nome do tratador')).toBeNull();
+  });
+
+  test('responsável cadastra e edita produto do estoque', async () => {
+    const tela = await renderNaAba(<App />, 'Produtos');
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar produto' }));
+    await fireEvent.changeText(tela.getByLabelText('Nome do produto'), 'Pastilha de Cloro 5x1');
+    await fireEvent.changeText(tela.getByLabelText('Marca do produto'), 'HidroAll');
+    await fireEvent.changeText(tela.getByLabelText('Quantidade em estoque'), '4');
+    await fireEvent.press(tela.getByText('Unidade (UN)'));
+    await fireEvent.changeText(tela.getByLabelText('Valor unitário da última compra'), '8,67');
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar produto' }));
+
+    await waitFor(() => expect(Firebase.salvarProduto).toHaveBeenCalledWith('empresa-teste', {
+      nome: 'Pastilha de Cloro 5x1', marca: 'HidroAll', quantidadeEstoque: 4, unidade: 'UN', valorUnitarioUltimaCompra: 8.67,
+    }));
+    expect(tela.getByText('4 UN')).toBeTruthy();
+    expect(tela.getByText('Marca: HidroAll')).toBeTruthy();
+    expect(tela.getByText('R$ 8,67 / UN')).toBeTruthy();
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Editar produto: Pastilha de Cloro 5x1' }));
+    await fireEvent.changeText(tela.getByLabelText('Quantidade em estoque'), '3');
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar produto' }));
+
+    await waitFor(() => expect(Firebase.atualizarProduto).toHaveBeenCalledWith('empresa-teste', 'produto-novo', {
+      nome: 'Pastilha de Cloro 5x1', marca: 'HidroAll', quantidadeEstoque: 3, unidade: 'UN', valorUnitarioUltimaCompra: 8.67,
+    }));
+  });
+
+  test('salva padrão da piscina usando produtos cadastrados no estoque', async () => {
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cliente-1', nome: 'Casa da família', ativo: true }]);
+      return jest.fn();
+    });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10' }]);
+      return jest.fn();
+    });
+    Firebase.observarProdutos.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'produto-cloro', nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg' }]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Clientes');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Configurar padrão' }));
+    await fireEvent.changeText(tela.getByLabelText('Quantidade de Cloro'), '250');
+    await fireEvent.press(tela.getByText('g'));
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar padrão' }));
+
+    await waitFor(() => expect(Firebase.atualizarTratamentoPadrao).toHaveBeenCalledWith('empresa-teste', 'piscina-1', {
+      tratamentoPadrao: [{ produtoId: 'produto-cloro', produto: 'Cloro', quantidade: '250', unidade: 'g' }],
+      orientacoesTratamento: '',
+    }));
   });
 
   test('responsável abre a agenda do funcionário com visitas atribuídas a ele', async () => {
@@ -431,17 +487,21 @@ describe('cadastro de cliente e visitas', () => {
       }]);
       return jest.fn();
     });
+    Firebase.observarProdutos.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'produto-cloro', nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg' }]);
+      return jest.fn();
+    });
     const tela = await renderNaAba(<App />, 'Clientes');
 
     await fireEvent.press(tela.getByRole('button', { name: 'Configurar padrão' }));
     expect(tela.getByText('Tratamento normal (sem choque)')).toBeTruthy();
     await fireEvent.changeText(tela.getByLabelText('Quantidade de Cloro'), '120');
-    await fireEvent.changeText(tela.getByLabelText('Unidade de Cloro'), 'g');
+    await fireEvent.press(tela.getByText('g'));
     await fireEvent.changeText(tela.getByLabelText('Observações do tratamento padrão'), 'Seguir as instruções do rótulo.');
     await fireEvent.press(tela.getByRole('button', { name: 'Salvar padrão' }));
 
     await waitFor(() => expect(Firebase.atualizarTratamentoPadrao).toHaveBeenCalledWith('empresa-teste', 'piscina-1', {
-      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      tratamentoPadrao: [{ produtoId: 'produto-cloro', produto: 'Cloro', quantidade: '120', unidade: 'g' }],
       orientacoesTratamento: 'Seguir as instruções do rótulo.',
     }));
     expect(tela.getByText('Cloro: 120 g')).toBeTruthy();
@@ -455,6 +515,10 @@ describe('cadastro de cliente e visitas', () => {
     });
     Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => {
       aoAtualizar([{ id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10' }]);
+      return jest.fn();
+    });
+    Firebase.observarProdutos.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'produto-cloro', nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg' }]);
       return jest.fn();
     });
     const tela = await renderNaAba(<App />, 'Clientes');
@@ -531,16 +595,15 @@ describe('cadastro de cliente e visitas', () => {
     );
   });
 
-  test('cadastra visita com data, local e serviço selecionados', async () => {
+  test('cadastra visita de inspeção com data, local e serviço selecionados', async () => {
     const tela = await render(<App />);
     await preencherLocal(tela);
     await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
     await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
     await fireEvent.press(tela.getByText('Selecionar no calendário'));
-    await fireEvent.press(tela.getByText('Aplicar produtos'));
-    await fireEvent.changeText(tela.getByPlaceholderText('Orientação de produtos'), 'Aplicar cloro após a medição.');
+    await fireEvent.press(tela.getByText('Inspeção'));
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
-    await waitFor(() => expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy());
+    await waitFor(() => expect(Firebase.salvarVisita).toHaveBeenCalled());
     expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
       tratadorUid: 'tratador-1', criadaPorUid: 'usuario-teste',
     }));
@@ -550,8 +613,7 @@ describe('cadastro de cliente e visitas', () => {
     const dataEsperada = `${String(amanha.getDate()).padStart(2, '0')}/${String(amanha.getMonth() + 1).padStart(2, '0')}/${amanha.getFullYear()}`;
     expect(tela.getByText(dataEsperada)).toBeTruthy();
     expect(tela.getAllByText('Casa da família — Rua das Flores, 10')).toHaveLength(1);
-    expect(tela.getAllByText('Aplicar produtos')).toHaveLength(1);
-    expect(tela.getByText('Aplicar cloro após a medição.')).toBeTruthy();
+    expect(tela.getAllByText('Inspeção')).toHaveLength(1);
   });
 
   test('não permite adicionar visita sem data, local e serviço', async () => {
@@ -574,7 +636,7 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Nenhuma visita programada.')).toBeTruthy();
   });
 
-  test('exige orientação para serviço de aplicar produtos', async () => {
+  test('exige padrão de produto para serviço de aplicar produtos', async () => {
     const tela = await render(<App />);
     await preencherLocal(tela);
     await fireEvent.press(tela.getByText('Casa da família — Rua das Flores, 10'));
@@ -582,14 +644,14 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByText('Selecionar no calendário'));
     await fireEvent.press(tela.getByText('Aplicar produtos'));
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
-    expect(alerta).toHaveBeenCalledWith('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
+    expect(alerta).toHaveBeenCalledWith('Padrão de produtos necessário', expect.stringContaining('Configure os produtos'));
   });
 
   test('preenche orientação de aplicar produtos com o padrão salvo na piscina', async () => {
     const piscina = {
       id: 'piscina-1', clienteId: 'cliente-1', cliente: 'Casa da família', endereco: 'Rua das Flores, 10',
       tipoPiscina: 'Fibra', litragem: 13000,
-      tratamentoPadrao: [{ produto: 'Cloro', quantidade: '120', unidade: 'g' }],
+      tratamentoPadrao: [{ produtoId: 'produto-cloro', produto: 'Cloro', quantidade: '120', unidade: 'g' }],
       orientacoesTratamento: 'Seguir as instruções do rótulo.',
     };
     Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => {
@@ -597,6 +659,10 @@ describe('cadastro de cliente e visitas', () => {
       return jest.fn();
     });
     Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([piscina]); return jest.fn(); });
+    Firebase.observarProdutos.mockImplementation((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'produto-cloro', nome: 'Cloro', quantidadeEstoque: 10, unidade: 'kg' }]);
+      return jest.fn();
+    });
     const tela = await render(<App />);
 
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar serviço' }));
@@ -609,7 +675,40 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
     await waitFor(() => expect(Firebase.salvarVisita).toHaveBeenCalledWith('empresa-teste', expect.objectContaining({
       orientacao: 'Cloro: 120 g\nSeguir as instruções do rótulo.',
+      produtosAplicados: { 'produto-cloro': { produto: 'Cloro', quantidade: 120, unidade: 'g' } },
     })));
+  });
+
+  test('desconta estoque quando a visita de aplicação é concluída', async () => {
+    const visita = {
+      id: 'visita-1', data: '20/11/2026', local: 'Casa da família', servico: 'Aplicar produtos', status: 'Pendente',
+      produtosAplicados: { 'produto-cloro': { produto: 'Cloro', quantidade: 250, unidade: 'g' } },
+    };
+    const tela = await render(<App visitasIniciais={[visita]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Marcar visita como Executada' }));
+    const alertaConclusao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
+    await act(async () => alertaConclusao[2][1].onPress());
+
+    await waitFor(() => expect(Firebase.concluirVisitaComBaixaEstoque).toHaveBeenCalledWith('empresa-teste', 'visita-1'));
+    expect(tela.getByText('✓ Visita concluída')).toBeTruthy();
+  });
+
+  test('mantém a visita pendente e avisa quando não há estoque suficiente', async () => {
+    Firebase.concluirVisitaComBaixaEstoque.mockRejectedValueOnce(Object.assign(new Error('Estoque insuficiente para Cloro.'), {
+      code: 'estoque-insuficiente',
+    }));
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '20/11/2026', local: 'Casa da família', servico: 'Aplicar produtos', status: 'Pendente',
+      produtosAplicados: { 'produto-cloro': { produto: 'Cloro', quantidade: 250, unidade: 'g' } },
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Marcar visita como Executada' }));
+    const alertaConclusao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
+    await act(async () => alertaConclusao[2][1].onPress());
+
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith('Estoque insuficiente', 'Estoque insuficiente para Cloro.'));
+    expect(tela.getByText('Status: Pendente')).toBeTruthy();
   });
 
   test.each(['Executada', 'Frustrada', 'Não realizada'])(
@@ -684,7 +783,7 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByRole('button', { name: 'Marcar visita como Executada' }));
 
     const chamadaConfirmacao = alerta.mock.calls.find(([titulo]) => titulo === 'Deseja concluir a visita?');
-    expect(chamadaConfirmacao[1]).toBe('A visita será movida para Visitas concluídas e não poderá ser alterada.');
+    expect(chamadaConfirmacao[1]).toBe('A visita será concluída e as quantidades de produtos usadas serão descontadas do estoque.');
     await act(async () => chamadaConfirmacao[2].find((botao) => botao.text === 'Não').onPress());
 
     expect(tela.getByText('Status: Pendente')).toBeTruthy();

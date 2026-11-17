@@ -1,22 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { cores } from '../styles/colors';
-import { produtosTratamento } from './dadosTratamento';
+import { converterParaUnidadeEstoque, unidadesDaDose } from '../services/unidades';
 
-export default function PadraoTratamento({ piscina, onSalvar }) {
+export default function PadraoTratamento({ piscina, produtos, onSalvar, onAbrirProdutos }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [quantidades, setQuantidades] = useState(() => carregarQuantidades(piscina.tratamentoPadrao));
+  const [quantidades, setQuantidades] = useState(() => carregarQuantidades(produtos, piscina.tratamentoPadrao));
   const [observacoes, setObservacoes] = useState(piscina.orientacoesTratamento || '');
 
-  function alterarCampo(produto, campo, valor) {
+  useEffect(() => {
+    if (!mostrarFormulario) {
+      setQuantidades(carregarQuantidades(produtos, piscina.tratamentoPadrao));
+      setObservacoes(piscina.orientacoesTratamento || '');
+    }
+  }, [mostrarFormulario, piscina, produtos]);
+
+  function alterarCampo(produtoId, campo, valor) {
     setQuantidades((atuais) => ({
       ...atuais,
-      [produto]: { ...atuais[produto], [campo]: valor },
+      [produtoId]: { ...atuais[produtoId], [campo]: valor },
     }));
   }
 
   function cancelarEdicao() {
-    setQuantidades(carregarQuantidades(piscina.tratamentoPadrao));
+    setQuantidades(carregarQuantidades(produtos, piscina.tratamentoPadrao));
     setObservacoes(piscina.orientacoesTratamento || '');
     setMostrarFormulario(false);
   }
@@ -24,22 +32,26 @@ export default function PadraoTratamento({ piscina, onSalvar }) {
   async function salvar() {
     const itens = [];
 
-    for (const produto of produtosTratamento) {
-      const quantidade = quantidades[produto].quantidade.trim();
-      const unidade = quantidades[produto].unidade.trim();
-      if (!quantidade && !unidade) continue;
+    for (const produto of produtos) {
+      const quantidade = quantidades[produto.id]?.quantidade?.trim() || '';
+      if (!quantidade) continue;
 
       const numero = Number(quantidade.replace(',', '.'));
-      if (!quantidade || !unidade || !Number.isFinite(numero) || numero <= 0) {
-        Alert.alert('Quantidade inválida', `Informe uma quantidade maior que zero e a unidade de ${produto}.`);
+      const unidadeDose = quantidades[produto.id]?.unidade || produto.unidade;
+      if (!Number.isFinite(numero) || numero <= 0
+        || converterParaUnidadeEstoque(numero, unidadeDose, produto.unidade) === null) {
+        Alert.alert('Quantidade inválida', `Informe uma quantidade maior que zero para ${produto.nome}.`);
         return;
       }
 
-      itens.push({ produto, quantidade, unidade });
+      itens.push({ produtoId: produto.id, produto: produto.nome, quantidade, unidade: unidadeDose });
     }
 
+    const itensSemProdutoNoEstoque = (piscina.tratamentoPadrao || []).filter((item) => !item.produtoId
+      && !produtos.some((produto) => produto.nome.trim().toLocaleLowerCase('pt-BR') === item.produto?.trim().toLocaleLowerCase('pt-BR')));
+
     const salvo = await onSalvar(piscina.id, {
-      tratamentoPadrao: itens,
+      tratamentoPadrao: [...itens, ...itensSemProdutoNoEstoque],
       orientacoesTratamento: observacoes.trim(),
     });
     if (salvo) setMostrarFormulario(false);
@@ -50,29 +62,47 @@ export default function PadraoTratamento({ piscina, onSalvar }) {
       <Text style={styles.titulo}>Tratamento normal (sem choque)</Text>
       {mostrarFormulario ? (
         <>
-          <Text style={styles.instrucao}>Preencha conforme o rótulo dos produtos usados nesta piscina. Os campos podem ficar vazios.</Text>
-          {produtosTratamento.map((produto) => (
-            <View key={produto} style={styles.linhaProduto}>
-              <Text style={styles.nomeProduto}>{produto}</Text>
-              <View style={styles.camposProduto}>
-                <TextInput
-                  accessibilityLabel={`Quantidade de ${produto}`}
-                  keyboardType="decimal-pad"
-                  style={[styles.campo, styles.campoQuantidade]}
-                  placeholder="Quantidade"
-                  value={quantidades[produto].quantidade}
-                  onChangeText={(valor) => alterarCampo(produto, 'quantidade', valor)}
-                />
-                <TextInput
-                  accessibilityLabel={`Unidade de ${produto}`}
-                  style={[styles.campo, styles.campoUnidade]}
-                  placeholder="Unidade"
-                  value={quantidades[produto].unidade}
-                  onChangeText={(valor) => alterarCampo(produto, 'unidade', valor)}
-                />
-              </View>
-            </View>
-          ))}
+          {produtos.length === 0 ? (
+            <>
+              <Text style={styles.instrucao}>Cadastre os produtos da empresa antes de configurar o tratamento desta piscina.</Text>
+              <Pressable accessibilityRole="button" onPress={onAbrirProdutos} style={({ pressed }) => [styles.botaoEditar, pressed && styles.pressionado]}>
+                <Text style={styles.textoBotaoEditar}>Ir para Produtos</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.instrucao}>Informe a quantidade usada em cada aplicação conforme o rótulo. O estoque será descontado com a conversão de unidade.</Text>
+              {produtos.map((produto) => (
+                <View key={produto.id} style={styles.linhaProduto}>
+                  <View style={styles.tituloProduto}>
+                    <Text style={styles.nomeProduto}>{produto.nome}</Text>
+                    <Text style={styles.unidade}>Estoque: {produto.unidade}</Text>
+                  </View>
+                  <View style={styles.camposProduto}>
+                    <TextInput
+                      accessibilityLabel={`Quantidade de ${produto.nome}`}
+                      keyboardType="decimal-pad"
+                      style={styles.campo}
+                      placeholder="Quantidade por aplicação"
+                      value={quantidades[produto.id]?.quantidade || ''}
+                      onChangeText={(valor) => alterarCampo(produto.id, 'quantidade', valor)}
+                    />
+                    <View style={styles.seletorUnidade}>
+                      <Picker
+                        accessibilityLabel={`Unidade de ${produto.nome}`}
+                        mode="dropdown"
+                        style={styles.campoUnidade}
+                        selectedValue={quantidades[produto.id]?.unidade || produto.unidade}
+                        onValueChange={(valor) => alterarCampo(produto.id, 'unidade', valor)}
+                      >
+                        {unidadesDaDose(produto.unidade).map((unidade) => <Picker.Item key={unidade} label={unidade} value={unidade} />)}
+                      </Picker>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
           <TextInput
             accessibilityLabel="Observações do tratamento padrão"
             style={[styles.campo, styles.campoObservacoes]}
@@ -81,9 +111,9 @@ export default function PadraoTratamento({ piscina, onSalvar }) {
             onChangeText={setObservacoes}
             multiline
           />
-          <Pressable accessibilityRole="button" onPress={salvar} style={({ pressed }) => [styles.botaoSalvar, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
+          {produtos.length > 0 && <Pressable accessibilityRole="button" onPress={salvar} style={({ pressed }) => [styles.botaoSalvar, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
             <Text style={styles.textoBotao}>Salvar padrão</Text>
-          </Pressable>
+          </Pressable>}
           <Pressable accessibilityRole="button" onPress={cancelarEdicao} style={styles.botaoCancelar}>
             <Text style={styles.textoCancelar}>Cancelar</Text>
           </Pressable>
@@ -107,10 +137,15 @@ export default function PadraoTratamento({ piscina, onSalvar }) {
   );
 }
 
-function carregarQuantidades(tratamentoPadrao = []) {
-  return Object.fromEntries(produtosTratamento.map((produto) => {
-    const salvo = tratamentoPadrao.find((item) => item.produto === produto);
-    return [produto, { quantidade: salvo?.quantidade || '', unidade: salvo?.unidade || '' }];
+function carregarQuantidades(produtos = [], tratamentoPadrao = []) {
+  return Object.fromEntries(produtos.map((produto) => {
+    const salvo = tratamentoPadrao.find((item) => item.produtoId === produto.id
+      || item.produto?.trim().toLocaleLowerCase('pt-BR') === produto.nome.trim().toLocaleLowerCase('pt-BR'));
+    const unidades = unidadesDaDose(produto.unidade);
+    return [produto.id, {
+      quantidade: salvo?.quantidade || '',
+      unidade: unidades.includes(salvo?.unidade) ? salvo.unidade : unidades[0],
+    }];
   }));
 }
 
@@ -120,10 +155,12 @@ const styles = StyleSheet.create({
   instrucao: { color: cores.textoSecundario, fontSize: 13, lineHeight: 18 },
   linhaProduto: { marginTop: 10 },
   nomeProduto: { color: cores.texto, fontSize: 14, fontWeight: '500', marginBottom: 5 },
+  tituloProduto: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  unidade: { color: cores.textoSecundario, fontSize: 13 },
   camposProduto: { flexDirection: 'row', gap: 8 },
-  campo: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, fontSize: 14, paddingHorizontal: 10, paddingVertical: 9 },
-  campoQuantidade: { flex: 2 },
-  campoUnidade: { flex: 1 },
+  campo: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, flex: 1, fontSize: 14, paddingHorizontal: 10, paddingVertical: 9 },
+  seletorUnidade: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, minWidth: 90 },
+  campoUnidade: { height: 44 },
   campoObservacoes: { marginTop: 12, minHeight: 60, textAlignVertical: 'top' },
   botaoSalvar: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 7, marginTop: 12, overflow: 'hidden', padding: 11 },
   textoBotao: { color: cores.branco, fontSize: 14, fontWeight: '600' },

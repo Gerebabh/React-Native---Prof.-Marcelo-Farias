@@ -5,7 +5,7 @@ import { cores } from '../styles/colors';
 import VisitasLista from './VisitasLista';
 
 export default function TelaVisitas({
-  responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao,
+  responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao, produtosAplicados = [], onQuantidadeProduto,
   onLocal, onTratador, onAbrirCalendario, onSelecionarData, onFecharCalendario, onServico, onOrientacao, onAdicionarVisita,
   onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa,
 }) {
@@ -67,6 +67,19 @@ export default function TelaVisitas({
               </Picker>
             </View>
             {servico === 'Aplicar produtos' && <TextInput accessibilityLabel="Orientação de produtos" style={styles.campo} placeholder="Orientação de produtos" value={orientacao} onChangeText={onOrientacao} />}
+            {servico === 'Aplicar produtos' && produtosAplicados.map((produto) => (
+              <View key={produto.produtoId} style={styles.produtoAplicado}>
+                <Text style={styles.rotulo}>{produto.produto} ({produto.unidade})</Text>
+                <TextInput
+                  accessibilityLabel={`Quantidade de ${produto.produto} nesta visita`}
+                  style={styles.campo}
+                  placeholder="Quantidade a utilizar"
+                  keyboardType="decimal-pad"
+                  value={produto.quantidade}
+                  onChangeText={(valor) => onQuantidadeProduto(produto.produtoId, valor)}
+                />
+              </View>
+            ))}
             <Pressable accessibilityRole="button" onPress={onAdicionarVisita} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
               <Text style={styles.textoBotao}>Adicionar visita</Text>
             </Pressable>
@@ -112,6 +125,7 @@ const styles = StyleSheet.create({
   placeholderData: { color: cores.cinza, fontSize: 16 },
   textoData: { color: cores.texto, fontSize: 16 },
   campo: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 8, borderWidth: 1, fontSize: 16, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 11 },
+  produtoAplicado: { marginTop: 4 },
   botao: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 8, marginTop: 4, overflow: 'hidden', padding: 14 },
   pressionado: { opacity: 0.85 },
   textoBotao: { color: cores.branco, fontSize: 16, fontWeight: '600' },

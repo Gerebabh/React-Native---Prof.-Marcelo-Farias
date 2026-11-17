@@ -22,3 +22,10 @@ test('mostra data, serviço e orientação de produto das visitas', async () => 
   expect(getByText('Aspiração')).toBeTruthy();
   expect(getByText('Aplicar cloro conforme medição.')).toBeTruthy();
 });
+
+test('mostra o custo dos produtos na visita concluída', async () => {
+  const visitas = [{ id: '2', data: '17/11/2026', local: 'Cliente — Endereço', servico: 'Aplicar produtos', status: 'Executada', custoTotalProdutos: 8.67 }];
+  const { getByText } = await render(<VisitasLista visitas={visitas} />);
+
+  expect(getByText('Gasto com produtos: R$ 8,67')).toBeTruthy();
+});

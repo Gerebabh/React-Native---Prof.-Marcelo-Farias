@@ -10,19 +10,25 @@ import NavegacaoInferior from './components/NavegacaoInferior';
 import TelaEquipe from './components/TelaEquipe';
 import TelaInicio from './components/TelaInicio';
 import TelaLocais from './components/TelaLocais';
+import TelaProdutos from './components/TelaProdutos';
 import TelaVisitas from './components/TelaVisitas';
 import { montarOrientacaoTratamento } from './components/dadosTratamento';
+import { unidadesDaDose } from './services/unidades';
 import {
   atualizarClienteAtivo,
+  atualizarProduto,
   atualizarTratamentoPadrao,
   atualizarVisita,
+  concluirVisitaComBaixaEstoque,
   convidarTratador,
   enviarRecuperacaoSenha,
   observarClientes,
   observarPiscinas,
+  observarProdutos,
   observarTratadores,
   observarVisitas,
   salvarPiscina,
+  salvarProduto,
   salvarVisita,
 } from './services/firebase';
 
@@ -48,6 +54,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       { id: 'clientes', titulo: 'Clientes' },
       { id: 'visitas', titulo: 'Visitas' },
       { id: 'equipe', titulo: 'Equipe' },
+      { id: 'produtos', titulo: 'Produtos' },
     ]
     : [
       { id: 'inicio', titulo: 'Início' },
@@ -63,6 +70,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const [litragem, setLitragem] = useState('');
   const [clientes, setClientes] = useState([]);
   const [piscinas, setPiscinas] = useState([]);
+  const [produtos, setProdutos] = useState([]);
   const [tratadores, setTratadores] = useState([]);
   const [tratadorUid, setTratadorUid] = useState('');
   const [nomeTratador, setNomeTratador] = useState('');
@@ -74,6 +82,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [servico, setServico] = useState('');
   const [orientacao, setOrientacao] = useState('');
+  const [produtosAplicados, setProdutosAplicados] = useState([]);
 
   useEffect(() => {
     if (!perfil.empresaId) return undefined;
@@ -97,12 +106,19 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
         setTratadorUid((atual) => !atual || atual === usuario.uid ? lista[0]?.id || usuario.uid : atual);
       }, () => Alert.alert('Erro', 'Não foi possível carregar a equipe.'))
       : undefined;
+    const cancelarProdutos = observarProdutos(perfil.empresaId, (lista) => setProdutos(lista), (erro) => {
+      const mensagem = erro?.code === 'permission-denied'
+        ? 'O Firebase bloqueou o acesso ao estoque. Publique as regras atuais do Firestore e tente novamente.'
+        : 'Confira sua conexão e tente carregar o estoque novamente.';
+      Alert.alert('Não foi possível carregar o estoque', mensagem);
+    });
 
     return () => {
       cancelarPiscinas?.();
       cancelarClientes?.();
       cancelarVisitas?.();
       cancelarTratadores?.();
+      cancelarProdutos?.();
     };
   }, [perfil.empresaId, perfil.papel, responsavel, usuario.uid]);
 
@@ -178,6 +194,50 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     }
   }
 
+  async function salvarProdutoNoEstoque(dados) {
+    const nome = dados.nome.trim();
+    const marca = (dados.marca || '').trim();
+    const unidade = dados.unidade.trim();
+    const quantidadeEstoque = Number(dados.quantidadeEstoque.replace(',', '.'));
+    const valorUnitarioUltimaCompra = Number(dados.valorUnitarioUltimaCompra.replace(',', '.'));
+
+    if (!nome || !unidade || !dados.quantidadeEstoque.trim()) {
+      Alert.alert('Cadastro incompleto', 'Informe o nome, a quantidade em estoque e a unidade do produto.');
+      return false;
+    }
+    if (!Number.isFinite(quantidadeEstoque) || quantidadeEstoque < 0) {
+      Alert.alert('Quantidade inválida', 'Informe uma quantidade em estoque igual ou maior que zero.');
+      return false;
+    }
+
+    if (!Number.isFinite(valorUnitarioUltimaCompra) || valorUnitarioUltimaCompra <= 0) {
+      Alert.alert('Valor inválido', 'Informe o valor unitário da última compra, maior que zero.');
+      return false;
+    }
+
+    const produto = { nome, marca, quantidadeEstoque, unidade, valorUnitarioUltimaCompra };
+    if (!unidadesDaDose(unidade).length) {
+      Alert.alert('Unidade inválida', 'Escolha uma unidade válida para controlar o estoque.');
+      return false;
+    }
+    try {
+      if (dados.id) {
+        await atualizarProduto(perfil.empresaId, dados.id, produto);
+        setProdutos((lista) => lista.map((item) => item.id === dados.id ? { ...item, ...produto } : item));
+      } else {
+        const novoProduto = await salvarProduto(perfil.empresaId, produto);
+        setProdutos((lista) => lista.some((item) => item.id === novoProduto.id) ? lista : [...lista, novoProduto]);
+      }
+      return true;
+    } catch (erro) {
+      const mensagem = erro?.code === 'permission-denied'
+        ? 'O Firebase bloqueou o cadastro. Publique as regras atuais do Firestore e tente novamente.'
+        : 'Confira sua conexão e tente salvar o produto novamente.';
+      Alert.alert('Não foi possível salvar', mensagem);
+      return false;
+    }
+  }
+
   function cadastrarClienteAntesDaVisita() {
     setRetornarParaVisitas(true);
     setMostrarFormularioCliente(clientes.length === 0 && piscinas.length === 0);
@@ -219,6 +279,16 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       return;
     }
 
+    const produtosDaVisita = produtosAplicados.map((item) => ({
+      ...item,
+      quantidade: Number(item.quantidade.replace(',', '.')),
+    }));
+    if (servico === 'Aplicar produtos' && (produtosDaVisita.length === 0
+      || produtosDaVisita.some((item) => !Number.isFinite(item.quantidade) || item.quantidade <= 0))) {
+      Alert.alert('Padrão de produtos necessário', 'Configure os produtos e as quantidades no cadastro desta piscina antes de agendar a aplicação.');
+      return;
+    }
+
     if (servico === 'Aplicar produtos' && !orientacao.trim()) {
       Alert.alert('Orientação necessária', 'Informe os produtos ou orientações desta visita.');
       return;
@@ -237,6 +307,13 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       litragem: piscina.litragem,
       servico,
       orientacao: servico === 'Aplicar produtos' ? orientacao.trim() : '',
+      produtosAplicados: servico === 'Aplicar produtos'
+        ? Object.fromEntries(produtosDaVisita.map((item) => [item.produtoId, {
+          produto: item.produto,
+          quantidade: item.quantidade,
+          unidade: item.unidade,
+        }]))
+        : {},
       tratadorUid,
       tratadorNome: tratador?.nome || tratador?.email || '',
       criadaPorUid: usuario.uid,
@@ -256,6 +333,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     setDataVisita(null);
     setServico('');
     setOrientacao('');
+    setProdutosAplicados([]);
     setTratadorUid('');
     setMostrarFormularioVisita(false);
   }
@@ -270,6 +348,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     if (servico === 'Aplicar produtos') {
       const piscina = piscinas.find((item) => item.id === piscinaId);
       setOrientacao(montarOrientacaoTratamento(piscina));
+      setProdutosAplicados(carregarProdutosPiscina(piscina, produtos));
     }
   }
 
@@ -278,9 +357,15 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     if (servicoSelecionado === 'Aplicar produtos') {
       const piscina = piscinas.find((item) => item.id === localVisitaId);
       setOrientacao(montarOrientacaoTratamento(piscina));
+      setProdutosAplicados(carregarProdutosPiscina(piscina, produtos));
     } else {
       setOrientacao('');
+      setProdutosAplicados([]);
     }
+  }
+
+  function alterarQuantidadeProduto(produtoId, quantidade) {
+    setProdutosAplicados((lista) => lista.map((item) => item.produtoId === produtoId ? { ...item, quantidade } : item));
   }
 
   async function atualizarDadosVisita(id, dados) {
@@ -302,12 +387,27 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   function confirmarConclusaoVisita(id) {
     Alert.alert(
       'Deseja concluir a visita?',
-      'A visita será movida para Visitas concluídas e não poderá ser alterada.',
+      'A visita será concluída e as quantidades de produtos usadas serão descontadas do estoque.',
       [
         { text: 'Não', style: 'cancel', onPress: () => {} },
-        { text: 'Sim', onPress: () => alterarStatusVisita(id, 'Executada') },
+        { text: 'Sim', onPress: () => concluirVisita(id) },
       ]
     );
+  }
+
+  async function concluirVisita(id) {
+    try {
+      const resultado = await concluirVisitaComBaixaEstoque(perfil.empresaId, id);
+      setVisitas((listaAtual) => listaAtual.map((visita) => visita.id === id
+        ? { ...visita, status: 'Executada', ...resultado }
+        : visita));
+    } catch (erro) {
+      const titulo = erro.code === 'estoque-insuficiente' ? 'Estoque insuficiente'
+        : erro.code === 'produtos-nao-configurados' ? 'Padrão de produtos necessário'
+          : erro.code === 'preco-nao-configurado' ? 'Valor da compra necessário'
+          : 'Não foi possível concluir';
+      Alert.alert(titulo, erro.message || 'Confira o estoque e tente novamente.');
+    }
   }
 
   function alterarJustificativaVisita(id, justificativa) {
@@ -560,6 +660,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
               cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas} clientes={clientes}
               mostrarFormulario={mostrarFormularioCliente} onMostrarFormulario={() => setMostrarFormularioCliente(true)} onCancelarFormulario={cancelarCadastroDeCliente}
               onCliente={setCliente} onEndereco={setEndereco} onTipoPiscina={setTipoPiscina} onLitragem={setLitragem} onSalvar={salvarResidencia}
+              produtos={produtos} onAbrirProdutos={() => setAbaSelecionada('produtos')}
               onAlternarCliente={alternarClienteAtivo} onSalvarTratamento={salvarTratamentoPadrao}
             />
           </ScrollArea>
@@ -569,6 +670,11 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             <TelaEquipe nome={nomeTratador} email={emailTratador} tratadores={tratadores} visitas={visitas} enviando={enviandoConvite} onNome={setNomeTratador} onEmail={setEmailTratador} onConvidar={enviarConvite} />
           </ScrollArea>
         )}
+        {abaAtual === 'produtos' && responsavel && (
+          <ScrollArea>
+            <TelaProdutos produtos={produtos} onSalvar={salvarProdutoNoEstoque} />
+          </ScrollArea>
+        )}
         {abaAtual === 'visitas' && (
           <TelaVisitas
             responsavel={responsavel} possuiLocalAtivo={piscinasAtivas.length > 0} temClientes={clientes.length > 0 || piscinas.length > 0}
@@ -576,7 +682,8 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             piscinas={piscinasAtivas} tratadores={tratadores} visitas={visitas}
             localVisitaId={localVisitaId} tratadorUid={tratadorUid} dataVisita={dataVisita} mostrarCalendario={mostrarCalendario}
             mostrarFormulario={mostrarFormularioVisita}
-            servico={servico} orientacao={orientacao} onLocal={selecionarLocalVisita} onTratador={setTratadorUid}
+            servico={servico} orientacao={orientacao} produtosAplicados={produtosAplicados}
+            onQuantidadeProduto={alterarQuantidadeProduto} onLocal={selecionarLocalVisita} onTratador={setTratadorUid}
             onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
             onFecharCalendario={() => setMostrarCalendario(false)} onServico={selecionarServico} onOrientacao={setOrientacao}
             onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
@@ -605,6 +712,22 @@ function inicioDoDia(data) {
   const dia = new Date(data);
   dia.setHours(0, 0, 0, 0);
   return dia;
+}
+
+function carregarProdutosPiscina(piscina, produtos) {
+  return (piscina?.tratamentoPadrao || []).flatMap((item) => {
+    const nome = item.produto?.trim().toLocaleLowerCase('pt-BR');
+    const produto = produtos.find((cadastrado) => cadastrado.id === item.produtoId
+      || cadastrado.nome.trim().toLocaleLowerCase('pt-BR') === nome);
+    return produto ? [{
+      produtoId: produto.id,
+      produto: produto.nome,
+      quantidade: String(item.quantidade || ''),
+      unidade: unidadesDaDose(produto.unidade).includes(item.unidade)
+        ? item.unidade
+        : unidadesDaDose(produto.unidade)[0],
+    }] : [];
+  });
 }
 
 const styles = StyleSheet.create({

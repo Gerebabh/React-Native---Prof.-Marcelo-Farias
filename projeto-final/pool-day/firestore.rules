@@ -33,6 +33,44 @@ service cloud.firestore {
         && get(caminhoMembro(empresaId, request.auth.uid)).data.papel == 'tratador';
     }
 
+    function quantidadeNaUnidadeDoEstoque(quantidade, unidadeDose, unidadeEstoque) {
+      return unidadeDose == unidadeEstoque ? quantidade
+        : unidadeDose == 'g' && unidadeEstoque == 'kg' ? quantidade / 1000.0
+          : unidadeDose == 'kg' && unidadeEstoque == 'g' ? quantidade * 1000
+            : unidadeDose == 'ml' && unidadeEstoque == 'L' ? quantidade / 1000.0
+              : unidadeDose == 'L' && unidadeEstoque == 'ml' ? quantidade * 1000
+                : -1;
+    }
+
+    function unidadeEstoqueValida(unidade) {
+      return unidade in ['kg', 'g', 'L', 'ml', 'UN'];
+    }
+
+    function baixaDeEstoquePermitida(empresaId, produtoId) {
+      let visitaId = request.resource.data.ultimaBaixaVisitaId;
+      let caminhoVisita = /databases/$(database)/documents/empresas/$(empresaId)/visitas/$(visitaId);
+      let visitaAntes = get(caminhoVisita).data;
+      let visitaDepois = getAfter(caminhoVisita).data;
+      let consumo = visitaDepois.produtosAplicados[produtoId];
+
+      return tratador(empresaId)
+        && exists(caminhoVisita)
+        && visitaAntes.tratadorUid == request.auth.uid
+        && visitaAntes.status != 'Executada'
+        && visitaDepois.status == 'Executada'
+        && visitaDepois.estoqueBaixado == true
+        && visitaDepois.produtosAplicados.keys().hasAny([produtoId])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'quantidadeEstoque', 'ultimaBaixaVisitaId', 'ultimaBaixaQuantidade'
+        ])
+        && consumo.quantidade is number
+        && consumo.quantidade > 0
+        && quantidadeNaUnidadeDoEstoque(consumo.quantidade, consumo.unidade, resource.data.unidade) > 0
+        && request.resource.data.ultimaBaixaQuantidade == quantidadeNaUnidadeDoEstoque(consumo.quantidade, consumo.unidade, resource.data.unidade)
+        && request.resource.data.quantidadeEstoque == resource.data.quantidadeEstoque - quantidadeNaUnidadeDoEstoque(consumo.quantidade, consumo.unidade, resource.data.unidade)
+        && request.resource.data.quantidadeEstoque >= 0;
+    }
+
     function criarPerfilDoTratador(empresaId, usuarioId) {
       return autenticado()
         && usuarioId != request.auth.uid
@@ -172,6 +210,31 @@ service cloud.firestore {
         allow write: if responsavel(empresaId);
       }
 
+      match /produtos/{produtoId} {
+        allow read: if responsavel(empresaId) || tratador(empresaId);
+        allow create: if responsavel(empresaId)
+          && request.resource.data.keys().hasAll(['nome', 'quantidadeEstoque', 'unidade', 'criadoEm', 'atualizadoEm'])
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() > 0
+          && request.resource.data.quantidadeEstoque is number
+          && request.resource.data.quantidadeEstoque >= 0
+          && request.resource.data.valorUnitarioUltimaCompra is number
+          && request.resource.data.valorUnitarioUltimaCompra > 0
+          && (!request.resource.data.keys().hasAny(['marca']) || request.resource.data.marca is string)
+          && unidadeEstoqueValida(request.resource.data.unidade);
+        allow update: if (responsavel(empresaId)
+            && request.resource.data.nome is string
+            && request.resource.data.nome.size() > 0
+            && request.resource.data.quantidadeEstoque is number
+            && request.resource.data.quantidadeEstoque >= 0
+            && request.resource.data.valorUnitarioUltimaCompra is number
+            && request.resource.data.valorUnitarioUltimaCompra > 0
+            && (!request.resource.data.keys().hasAny(['marca']) || request.resource.data.marca is string)
+            && unidadeEstoqueValida(request.resource.data.unidade))
+          || baixaDeEstoquePermitida(empresaId, produtoId);
+        allow delete: if responsavel(empresaId);
+      }
+
       match /visitas/{visitaId} {
         allow get: if responsavel(empresaId)
           || (tratador(empresaId) && resource.data.tratadorUid == request.auth.uid);
@@ -186,8 +249,16 @@ service cloud.firestore {
               'status', 'justificativa', 'horarioChegada', 'latitude',
               'longitude', 'enderecoChegada', 'horarioSaida',
               'latitudeSaida', 'longitudeSaida', 'enderecoSaida',
-              'fotoAntes', 'fotoDepois'
-            ]));
+              'fotoAntes', 'fotoDepois', 'estoqueBaixado', 'estoqueBaixadoEm',
+              'custosProdutos', 'custoTotalProdutos'
+            ])
+            && (request.resource.data.status != 'Executada'
+              || (resource.data.servico != 'Aplicar produtos'
+                || (request.resource.data.estoqueBaixado == true
+                  && request.resource.data.produtosAplicados is map
+                  && request.resource.data.custosProdutos is map
+                  && request.resource.data.custoTotalProdutos is number
+                  && request.resource.data.custoTotalProdutos >= 0))));
       }
     }
 
