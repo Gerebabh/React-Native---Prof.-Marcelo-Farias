@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRandomBytesAsync } from 'expo-crypto';
+import { Platform } from 'react-native';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
@@ -21,10 +22,12 @@ import {
   getFirestore,
   onSnapshot,
   query,
+  runTransaction,
   updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
+import { converterParaUnidadeEstoque, normalizarUnidade } from './unidades';
 
 const configuracao = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -45,13 +48,17 @@ let bancoConvites = null;
 if (firebaseConfigurado) {
   const aplicativo = getApps().length ? getApp() : initializeApp(configuracao);
 
-  try {
-    auth = initializeAuth(aplicativo, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
-  } catch (erro) {
-    if (erro.code !== 'auth/already-initialized') throw erro;
+  if (Platform.OS === 'web') {
     auth = getAuth(aplicativo);
+  } else {
+    try {
+      auth = initializeAuth(aplicativo, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    } catch (erro) {
+      if (erro.code !== 'auth/already-initialized') throw erro;
+      auth = getAuth(aplicativo);
+    }
   }
 
   auth.languageCode = 'pt-BR';
@@ -304,6 +311,130 @@ export async function atualizarClienteAtivo(empresaId, clienteId, ativo) {
 export async function atualizarTratamentoPadrao(empresaId, piscinaId, dados) {
   verificarConfiguracao();
   await updateDoc(doc(banco, 'empresas', empresaId, 'piscinas', piscinaId), dados);
+}
+
+export function observarProdutos(empresaId, aoAtualizar, aoErro) {
+  verificarConfiguracao();
+  const referencia = collection(banco, 'empresas', empresaId, 'produtos');
+  return onSnapshot(referencia, (snapshot) => {
+    aoAtualizar(snapshot.docs.map((documento) => {
+      const dados = documento.data();
+      return { id: documento.id, ...dados, unidade: normalizarUnidade(dados.unidade) || dados.unidade };
+    }));
+  }, aoErro);
+}
+
+export async function salvarProduto(empresaId, dados) {
+  verificarConfiguracao();
+  const agora = new Date().toISOString();
+  const referencia = await addDoc(collection(banco, 'empresas', empresaId, 'produtos'), {
+    ...dados,
+    criadoEm: agora,
+    atualizadoEm: agora,
+  });
+  return { id: referencia.id, ...dados, criadoEm: agora, atualizadoEm: agora };
+}
+
+export async function atualizarProduto(empresaId, produtoId, dados) {
+  verificarConfiguracao();
+  await updateDoc(doc(banco, 'empresas', empresaId, 'produtos', produtoId), {
+    ...dados,
+    atualizadoEm: new Date().toISOString(),
+  });
+}
+
+export async function concluirVisitaComBaixaEstoque(empresaId, visitaId) {
+  verificarConfiguracao();
+  const referenciaVisita = doc(banco, 'empresas', empresaId, 'visitas', visitaId);
+
+  return runTransaction(banco, async (transacao) => {
+    const snapshotVisita = await transacao.get(referenciaVisita);
+    if (!snapshotVisita.exists()) {
+      throw erroDeEstoque('A visita não foi encontrada.', 'visita-nao-encontrada');
+    }
+
+    const visita = snapshotVisita.data();
+    if (visita.status === 'Executada' || visita.estoqueBaixado === true) {
+      return {
+        jaConcluida: true,
+        estoqueBaixado: visita.estoqueBaixado === true,
+        custosProdutos: visita.custosProdutos || {},
+        custoTotalProdutos: Number(visita.custoTotalProdutos) || 0,
+      };
+    }
+
+    const produtosAplicados = visita.produtosAplicados || {};
+    const consumos = Object.entries(produtosAplicados);
+    const custosProdutos = {};
+    if (visita.servico === 'Aplicar produtos' && consumos.length === 0) {
+      throw erroDeEstoque('Configure os produtos do estoque no padrão desta piscina antes de concluir a visita.', 'produtos-nao-configurados');
+    }
+
+    const documentosProdutos = await Promise.all(consumos.map(async ([produtoId, consumo]) => {
+      const referenciaProduto = doc(banco, 'empresas', empresaId, 'produtos', produtoId);
+      const snapshotProduto = await transacao.get(referenciaProduto);
+      const quantidade = Number(consumo.quantidade);
+
+      if (!snapshotProduto.exists()) {
+        throw erroDeEstoque(`O produto ${consumo.produto || 'do tratamento'} não está mais cadastrado no estoque.`, 'produto-nao-encontrado');
+      }
+
+      const produto = snapshotProduto.data();
+      const unidadeEstoque = normalizarUnidade(produto.unidade) || produto.unidade;
+      const quantidadeEstoqueUtilizada = converterParaUnidadeEstoque(quantidade, consumo.unidade, unidadeEstoque);
+      if (!Number.isFinite(quantidade) || quantidade <= 0 || quantidadeEstoqueUtilizada === null) {
+        throw erroDeEstoque(`Confira a quantidade e a unidade de ${produto.nome || consumo.produto}.`, 'consumo-invalido');
+      }
+      const valorUnitario = Number(produto.valorUnitarioUltimaCompra);
+      if (!Number.isFinite(valorUnitario) || valorUnitario <= 0) {
+        throw erroDeEstoque(`Cadastre o valor unitário da última compra de ${produto.nome || consumo.produto} antes de concluir a visita.`, 'preco-nao-configurado');
+      }
+      if (Number(produto.quantidadeEstoque) < quantidadeEstoqueUtilizada) {
+        throw erroDeEstoque(`Estoque insuficiente para ${produto.nome || consumo.produto}. Disponível: ${produto.quantidadeEstoque} ${produto.unidade}.`, 'estoque-insuficiente');
+      }
+
+      const custoTotal = quantidadeEstoqueUtilizada * valorUnitario;
+      custosProdutos[produtoId] = {
+        produto: produto.nome || consumo.produto,
+        quantidade: quantidade,
+        unidade: consumo.unidade,
+        quantidadeEstoque: quantidadeEstoqueUtilizada,
+        unidadeEstoque,
+        valorUnitario,
+        custoTotal,
+      };
+      return { referenciaProduto, produto, produtoId, quantidade: quantidadeEstoqueUtilizada };
+    }));
+
+    const horarioConclusao = new Date().toISOString();
+    for (const item of documentosProdutos) {
+      transacao.update(item.referenciaProduto, {
+        quantidadeEstoque: Number(item.produto.quantidadeEstoque) - item.quantidade,
+        ultimaBaixaVisitaId: visitaId,
+        ultimaBaixaQuantidade: item.quantidade,
+      });
+    }
+    transacao.update(referenciaVisita, {
+      status: 'Executada',
+      estoqueBaixado: documentosProdutos.length > 0,
+      estoqueBaixadoEm: documentosProdutos.length > 0 ? horarioConclusao : '',
+      custosProdutos,
+      custoTotalProdutos: Object.values(custosProdutos).reduce((total, item) => total + item.custoTotal, 0),
+    });
+
+    return {
+      jaConcluida: false,
+      estoqueBaixado: documentosProdutos.length > 0,
+      custosProdutos,
+      custoTotalProdutos: Object.values(custosProdutos).reduce((total, item) => total + item.custoTotal, 0),
+    };
+  });
+}
+
+function erroDeEstoque(mensagem, codigo) {
+  const erro = new Error(mensagem);
+  erro.code = codigo;
+  return erro;
 }
 
 export function observarPiscinas(empresaId, aoAtualizar, aoErro) {

@@ -110,6 +110,9 @@ function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChan
         )
       )}
       <Text style={styles.status}>Status: {statusAtual}</Text>
+      {statusAtual === 'Executada' && Number(item.custoTotalProdutos) > 0 && (
+        <Text style={styles.custoProdutos}>Gasto com produtos: {formatarMoeda(item.custoTotalProdutos)}</Text>
+      )}
       {precisaJustificativa && (
         <>
           <TextInput
@@ -183,6 +186,10 @@ function FotoEtapa({ titulo, textoVazio, acessibilidade, observacao, uri, onPres
   );
 }
 
+function formatarMoeda(valor) {
+  return `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
+}
+
 const styles = StyleSheet.create({
   vazio: { color: cores.textoSecundario, fontSize: 15, marginTop: 8 },
   cartao: { backgroundColor: cores.branco, borderRadius: 10, marginTop: 10, padding: 16 },
@@ -206,6 +213,7 @@ const styles = StyleSheet.create({
   botaoChegada: { alignItems: 'center', backgroundColor: cores.azulEscuro, borderRadius: 8, marginTop: 12, padding: 11 },
   textoBotaoChegada: { color: cores.branco, fontSize: 15, fontWeight: '600' },
   registroChegada: { color: cores.verde, fontSize: 14, fontWeight: '600', marginTop: 8 },
+  custoProdutos: { color: cores.azulEscuro, fontSize: 14, fontWeight: '600', marginTop: 6 },
   secaoFotos: { backgroundColor: cores.fundoCartao, borderRadius: 8, marginTop: 12, padding: 12 },
   tituloFotos: { color: cores.azulEscuro, fontSize: 16, fontWeight: '600', marginBottom: 8 },
   itemFoto: { borderTopColor: cores.borda, borderTopWidth: 1, marginTop: 8, paddingTop: 8 },
