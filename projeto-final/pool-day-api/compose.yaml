@@ -1,0 +1,24 @@
+name: pool-day-api
+services:
+  pool-day-api:
+    build: .
+    container_name: pool-day-api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:${PORTA_LOCAL:-8089}:3000"
+    volumes:
+      - ${PASTA_FOTOS:-/srv/solutionforge/pool-day-api/fotos}:/dados/fotos:z
+      - ${CREDENCIAL_FIREBASE:-./segredos/firebase.json}:/run/segredos/firebase.json:ro,z
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
