@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Autenticacao from './components/Autenticacao';
 import NavegacaoInferior from './components/NavegacaoInferior';
+import CabecalhoApp from './components/CabecalhoApp';
 import TelaEquipe from './components/TelaEquipe';
 import TelaInicio from './components/TelaInicio';
 import TelaLocais from './components/TelaLocais';
@@ -38,9 +39,9 @@ export default function App(props) {
   return (
     <SafeAreaProvider>
       <Autenticacao>
-        {({ usuario, perfil, aoSair }) => (
+        {({ usuario, perfil, aoSair, aoAtualizarPerfil }) => (
           <SafeAreaView style={styles.areaSegura}>
-            <ConteudoApp {...props} usuario={usuario} perfil={perfil} aoSair={aoSair} />
+            <ConteudoApp {...props} usuario={usuario} perfil={perfil} aoSair={aoSair} aoAtualizarPerfil={aoAtualizarPerfil} />
           </SafeAreaView>
         )}
       </Autenticacao>
@@ -48,7 +49,7 @@ export default function App(props) {
   );
 }
 
-function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
+function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualizarPerfil }) {
   const responsavel = perfil.papel === 'responsavel';
   const abas = responsavel
     ? [
@@ -701,16 +702,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   return (
     <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar style="light" />
-      <View style={styles.cabecalho}>
-        <View>
-          <Text style={styles.titulo}>Pool Day</Text>
-          <Text style={styles.subtitulo}>Tratamento e visitas programadas</Text>
-          <Text style={styles.infoConta}>{perfil.nomeEmpresa} • {perfil.nome || usuario.email}</Text>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Sair da conta" onPress={aoSair} style={styles.botaoSair}>
-          <Text style={styles.textoBotaoSair}>Sair</Text>
-        </Pressable>
-      </View>
+      <CabecalhoApp usuario={usuario} perfil={perfil} aoSair={aoSair} aoAtualizarPerfil={aoAtualizarPerfil} />
 
       <View style={styles.conteudo}>
         {abaAtual === 'inicio' && (
@@ -817,12 +809,6 @@ function carregarProdutosPiscina(piscina, produtos) {
 const styles = StyleSheet.create({
   areaSegura: { flex: 1, backgroundColor: cores.fundoTela },
   teclado: { flex: 1 },
-  cabecalho: { alignItems: 'center', backgroundColor: cores.azulEscuro, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
-  titulo: { color: cores.branco, fontSize: 30, fontWeight: '700' },
-  subtitulo: { color: cores.azulClaro, fontSize: 14, marginTop: 2 },
-  infoConta: { color: cores.azulClaro, fontSize: 12, marginTop: 7 },
-  botaoSair: { borderColor: cores.azulClaro, borderRadius: 7, borderWidth: 1, marginLeft: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  textoBotaoSair: { color: cores.branco, fontSize: 13, fontWeight: '600' },
   conteudo: { flex: 1, backgroundColor: cores.fundoTela },
   areaRolavel: { flex: 1 },
   conteudoRolavel: { flexGrow: 1 },
