@@ -157,6 +157,19 @@ describe('regras de acesso por empresa e papel', () => {
     await assertSucceeds(setDoc(visita, { tratadorUid: usuarioTratadorA, status: 'Pendente' }));
   });
 
+  test('visita não pode ser criada com foto e responsável não consegue gravar nem alterar metadados', async () => {
+    const banco = firestoreDo(usuarioResponsavelA);
+    const visita = doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-foto-nova'));
+    const foto = { arquivoId: 'arquivo-servidor', latitude: -15.79, longitude: -47.88 };
+
+    await assertFails(setDoc(visita, { tratadorUid: usuarioTratadorA, status: 'Pendente', fotoAntes: foto }));
+    await assertSucceeds(updateDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a')), { status: 'Frustrada' }));
+    await assertFails(updateDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a')), {
+      status: 'Frustrada', fotoDepois: foto,
+    }));
+    await assertFails(updateDoc(doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a')), { fotoAntes: foto }));
+  });
+
   test('responsável pode listar a equipe, mas tratador não pode consultar outros membros', async () => {
     const equipe = collection(firestoreDo(usuarioResponsavelA), `empresas/${empresaA}/membros`);
     const resultado = await assertSucceeds(getDocs(equipe));
@@ -269,12 +282,29 @@ describe('regras de acesso por empresa e papel', () => {
     const visita = doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'));
 
     await assertSucceeds(updateDoc(visita, { status: 'Executada', horarioChegada: '2026-11-10T12:00:00Z' }));
+    await assertFails(updateDoc(visita, { fotoAntes: { arquivoId: 'arquivo-falso' } }));
+    await assertFails(updateDoc(visita, { fotoDepois: { arquivoId: 'arquivo-falso' } }));
+    await assertSucceeds(updateDoc(visita, { horarioSaida: '2026-11-10T13:00:00Z' }));
     await assertFails(updateDoc(visita, { tratadorUid: usuarioTratadorA2 }));
     await assertFails(updateDoc(visita, { data: '2026-11-11' }));
     await assertFails(addDoc(collection(banco, `empresas/${empresaA}/visitas`), {
       tratadorUid: usuarioTratadorA, status: 'Pendente',
     }));
     await assertFails(deleteDoc(visita));
+  });
+
+  test('metadados de foto gravados pelo servidor continuam legíveis para responsável e tratador atribuído', async () => {
+    const foto = {
+      arquivoId: 'arquivo-servidor', latitude: -15.79, longitude: -47.88,
+      capturadaEm: '2026-11-17T14:20:00.000Z', enviadaEm: '2026-11-17T14:20:05.000Z',
+      enviadaPorUid: usuarioTratadorA,
+    };
+    await ambiente.withSecurityRulesDisabled(async (contexto) => {
+      await setDoc(doc(contexto.firestore(), caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a')), { fotoAntes: foto }, { merge: true });
+    });
+
+    await assertSucceeds(getDoc(doc(firestoreDo(usuarioResponsavelA), caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'))));
+    await assertSucceeds(getDoc(doc(firestoreDo(usuarioTratadorA), caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'))));
   });
 
   test('membro inativo não acessa os dados da empresa', async () => {

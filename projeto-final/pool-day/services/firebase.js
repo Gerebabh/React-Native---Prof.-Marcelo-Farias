@@ -33,7 +33,6 @@ const configuracao = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
@@ -88,6 +87,16 @@ function verificarConfiguracao() {
 export function observarEstadoAuth(callback) {
   if (!auth) return () => {};
   return onAuthStateChanged(auth, callback);
+}
+
+export async function obterToken() {
+  verificarConfiguracao();
+  if (!auth.currentUser) {
+    const erro = new Error('Entre novamente para acessar as fotos.');
+    erro.code = 'nao-autenticado';
+    throw erro;
+  }
+  return auth.currentUser.getIdToken();
 }
 
 export async function entrar(email, senha) {

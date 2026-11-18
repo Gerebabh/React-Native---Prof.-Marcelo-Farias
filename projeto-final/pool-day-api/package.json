@@ -1,0 +1,28 @@
+{
+  "name": "pool-day-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/servidor.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/servidor.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:emulador": "firebase emulators:exec --project demo-pool-day --only auth,firestore \"vitest run test/emulador.test.ts\""
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.9",
+    "fastify": "^5.12.8",
+    "firebase-admin": "^14.5.1",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

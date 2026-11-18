@@ -31,7 +31,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "O Pool Day acessa suas fotos para anexar imagens ao atendimento.",
+          "photosPermission": false,
           "cameraPermission": "O Pool Day usa a câmera para registrar fotos antes e depois do atendimento.",
           "microphonePermission": false
         }

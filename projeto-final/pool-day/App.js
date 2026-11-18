@@ -14,6 +14,7 @@ import TelaProdutos from './components/TelaProdutos';
 import TelaVisitas from './components/TelaVisitas';
 import { montarOrientacaoTratamento } from './components/dadosTratamento';
 import { unidadesDaDose } from './services/unidades';
+import { enviarFotoVisita } from './services/fotosVisita';
 import {
   atualizarClienteAtivo,
   atualizarProduto,
@@ -27,6 +28,7 @@ import {
   observarProdutos,
   observarTratadores,
   observarVisitas,
+  obterToken,
   salvarPiscina,
   salvarProduto,
   salvarVisita,
@@ -78,6 +80,8 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   const [enviandoConvite, setEnviandoConvite] = useState(false);
   const [localVisitaId, setLocalVisitaId] = useState('');
   const [visitas, setVisitas] = useState(visitasIniciais);
+  const [tokenFotos, setTokenFotos] = useState('');
+  const [fotoEnviando, setFotoEnviando] = useState('');
   const [dataVisita, setDataVisita] = useState(null);
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [servico, setServico] = useState('');
@@ -121,6 +125,18 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
       cancelarProdutos?.();
     };
   }, [perfil.empresaId, perfil.papel, responsavel, usuario.uid]);
+
+  useEffect(() => {
+    let ativo = true;
+    if (abaSelecionada === 'visitas') {
+      obterToken().then((token) => {
+        if (ativo) setTokenFotos(token);
+      }).catch(() => {
+        if (ativo) setTokenFotos('');
+      });
+    }
+    return () => { ativo = false; };
+  }, [abaSelecionada, usuario.uid]);
 
   async function salvarResidencia() {
     if (!cliente.trim() || !endereco.trim() || !tipoPiscina || !litragem.trim()) {
@@ -518,13 +534,12 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
 
   async function salvarHorarioChegada(id) {
     try {
-      const localizacao = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const enderecoChegada = await obterEndereco(localizacao.coords);
+      const localizacao = await obterLocalizacaoAtual();
       const chegada = {
         horarioChegada: new Date().toISOString(),
-        latitude: localizacao.coords.latitude,
-        longitude: localizacao.coords.longitude,
-        enderecoChegada: enderecoChegada || `${localizacao.coords.latitude.toFixed(2)}, ${localizacao.coords.longitude.toFixed(2)}`,
+        latitude: localizacao.latitude,
+        longitude: localizacao.longitude,
+        enderecoChegada: localizacao.endereco || `${localizacao.latitude.toFixed(2)}, ${localizacao.longitude.toFixed(2)}`,
       };
 
       await atualizarDadosVisita(id, chegada);
@@ -551,10 +566,19 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
     }
   }
 
+  async function obterLocalizacaoAtual() {
+    const localizacao = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return {
+      latitude: localizacao.coords.latitude,
+      longitude: localizacao.coords.longitude,
+      endereco: await obterEndereco(localizacao.coords),
+    };
+  }
+
   async function registrarSaida(id) {
     const visita = visitas.find((item) => item.id === id);
 
-    if (visita?.servico === 'Aspiração - Liberar o uso' && !visita.fotoDepois) {
+    if (visita?.servico === 'Aspiração - Liberar o uso' && !visita.fotoDepois?.arquivoId) {
       Alert.alert('Foto depois obrigatória', 'Anexe a foto depois da aspiração antes de registrar a saída.');
       return;
     }
@@ -564,35 +588,13 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
   }
 
   function adicionarFoto(id, campoFoto) {
+    const visita = visitas.find((item) => item.id === id);
+    if (visita?.status === 'Executada') return;
     const etapa = campoFoto === 'fotoAntes' ? 'antes' : 'depois';
-    Alert.alert(
-      `Foto ${etapa} do atendimento`,
-      'Escolha como deseja adicionar a foto.',
-      [
-        { text: 'Cancelar', style: 'cancel', onPress: () => {} },
-        { text: 'Galeria', onPress: () => escolherFotoGaleria(id, campoFoto) },
-        { text: 'Câmera', onPress: () => tirarFoto(id, campoFoto) },
-      ]
-    );
+    tirarFoto(id, campoFoto, etapa);
   }
 
-  async function escolherFotoGaleria(id, campoFoto) {
-    try {
-      const resultado = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-      if (!resultado.canceled && resultado.assets?.[0]?.uri) {
-        salvarFotoVisita(id, campoFoto, resultado.assets[0].uri);
-      }
-    } catch (erro) {
-      Alert.alert('Não foi possível adicionar a foto', 'Tente escolher outra imagem da galeria.');
-    }
-  }
-
-  async function tirarFoto(id, campoFoto) {
+  async function tirarFoto(id, campoFoto, etapa) {
     try {
       const permissao = await ImagePicker.requestCameraPermissionsAsync();
 
@@ -603,26 +605,97 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
 
       const resultado = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!resultado.canceled && resultado.assets?.[0]?.uri) {
-        salvarFotoVisita(id, campoFoto, resultado.assets[0].uri);
+        const capturadaEm = new Date().toISOString();
+        const localizacao = await obterLocalizacaoFoto();
+        if (!localizacao) return;
+        await salvarFotoVisita(id, campoFoto, resultado.assets[0].uri, capturadaEm, localizacao);
       }
     } catch (erro) {
-      Alert.alert('Não foi possível tirar a foto', 'Verifique a câmera do aparelho e tente novamente.');
+      if (erro?.code === 'localizacao-negada' || erro?.code === 'localizacao-indisponivel') {
+        Alert.alert('Localização necessária', erro.message || 'Ative o GPS e permita o acesso à localização para salvar a foto.');
+      } else {
+        Alert.alert(`Não foi possível tirar a foto ${etapa}`, 'Verifique a câmera do aparelho e tente novamente.');
+      }
     }
   }
 
-  function salvarFotoVisita(id, campoFoto, uri) {
-    atualizarDadosVisita(id, { [campoFoto]: uri });
+  async function obterLocalizacaoFoto() {
+    if (!await Location.hasServicesEnabledAsync()) {
+      const erro = new Error('Ative o serviço de localização do aparelho e tente novamente.');
+      erro.code = 'localizacao-indisponivel';
+      throw erro;
+    }
+    let permissao = await Location.getForegroundPermissionsAsync();
+    if (permissao.status !== 'granted') permissao = await Location.requestForegroundPermissionsAsync();
+    if (permissao.status !== 'granted') {
+      const erro = new Error('Permita o acesso à localização para registrar a foto.');
+      erro.code = 'localizacao-negada';
+      throw erro;
+    }
+    try {
+      const localizacao = await obterLocalizacaoAtual();
+      return { ...localizacao, endereco: localizacao.endereco || undefined };
+    } catch (_erro) {
+      const erro = new Error('Não foi possível obter sua localização. Verifique o GPS e tente novamente.');
+      erro.code = 'localizacao-indisponivel';
+      throw erro;
+    }
+  }
+
+  async function salvarFotoVisita(id, campoFoto, uri, capturadaEm, localizacao) {
+    const chaveEnvio = `${id}-${campoFoto}`;
+    setFotoEnviando(chaveEnvio);
+    try {
+      const foto = await enviarFotoVisita(id, campoFoto, { uri, capturadaEm, ...localizacao });
+      setVisitas((lista) => lista.map((visita) => visita.id === id ? { ...visita, [campoFoto]: foto } : visita));
+    } catch (erro) {
+      const mensagens = {
+        'visita-executada': 'Esta visita já foi concluída e as fotos não podem ser alteradas.',
+        'sem-acesso': 'Você não tem acesso a esta visita.',
+        'nao-encontrado': 'Você não tem acesso a esta visita.',
+        'arquivo-grande': 'A foto ultrapassa o limite de 8 MB. Tire outra foto e tente novamente.',
+        'tipo-invalido': 'A foto não está em um formato JPEG válido. Tire outra foto e tente novamente.',
+        'dados-invalidos': 'Confira a foto e a localização do aparelho e tente novamente.',
+        'nao-autenticado': 'Sua sessão expirou. Entre novamente e tente enviar a foto.',
+      };
+      if (__DEV__ && !mensagens[erro?.code]) {
+        console.warn('Falha ao enviar foto para a API:', {
+          codigo: erro?.code || 'sem-codigo',
+          detalhe: erro?.message || 'sem-detalhe',
+        });
+      }
+
+      const erroTemporario = !mensagens[erro?.code]
+        || erro?.code === 'erro-interno'
+        || /^http-5\d\d$/.test(erro?.code || '');
+      if (erroTemporario) {
+        Alert.alert(
+          'Falha ao enviar a foto',
+          'A foto não foi confirmada pelo servidor. Verifique sua conexão e tente novamente. Você pode repetir sem tirar outra foto.',
+          [
+            { text: 'Agora não', style: 'cancel' },
+            { text: 'Tentar novamente', onPress: () => salvarFotoVisita(id, campoFoto, uri, capturadaEm, localizacao) },
+          ],
+        );
+        return;
+      }
+
+      Alert.alert('Não foi possível enviar a foto', mensagens[erro?.code] || 'Confira sua conexão e tente novamente.');
+    } finally {
+      setFotoEnviando('');
+    }
   }
 
   const abaAtual = abas.some((aba) => aba.id === abaSelecionada) ? abaSelecionada : 'inicio';
   const clientesAtivos = clientes.filter((item) => item.ativo !== false).length;
   const hoje = formatarData(new Date());
   const agendamentosHoje = visitas.filter((item) => item.data === hoje).length;
+  const visitasAtrasadas = visitas.filter((item) => item.status !== 'Executada' && dataEhAnteriorAHoje(item.data)).length;
   const piscinasAtivas = piscinas.filter((piscina) => clientes.find((item) => item.id === piscina.clienteId)?.ativo !== false);
 
   return (
@@ -647,6 +720,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             responsavel={responsavel}
             clientesAtivos={clientesAtivos}
             agendamentosHoje={agendamentosHoje}
+            visitasAtrasadas={visitasAtrasadas}
             funcionarios={tratadores.length}
             aoAbrirLocais={() => setAbaSelecionada('clientes')}
             aoAbrirVisitas={() => setAbaSelecionada('visitas')}
@@ -687,6 +761,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair }) {
             onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
             onFecharCalendario={() => setMostrarCalendario(false)} onServico={selecionarServico} onOrientacao={setOrientacao}
             onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
+            tokenFotos={tokenFotos} fotoEnviando={fotoEnviando}
             onAbrirFormulario={() => setMostrarFormularioVisita(true)} onCancelarFormulario={() => setMostrarFormularioVisita(false)}
             onCadastrarCliente={cadastrarClienteAntesDaVisita}
             onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita}
@@ -706,6 +781,15 @@ function ScrollArea({ children }) {
 
 function formatarData(data) {
   return `${String(data.getDate()).padStart(2, '0')}/${String(data.getMonth() + 1).padStart(2, '0')}/${data.getFullYear()}`;
+}
+
+function dataEhAnteriorAHoje(valor) {
+  const [dia, mes, ano] = String(valor || '').split('/').map(Number);
+  if (!dia || !mes || !ano) return false;
+  const dataVisita = new Date(ano, mes - 1, dia);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return dataVisita < hoje;
 }
 
 function inicioDoDia(data) {

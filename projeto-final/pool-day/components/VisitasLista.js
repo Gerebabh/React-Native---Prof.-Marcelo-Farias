@@ -1,10 +1,11 @@
 import { cores } from '../styles/colors';
-import { Alert, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useState } from 'react';
+import { Alert, FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { baixarFotoVisita } from '../services/fotosVisita';
 
 const statusDisponiveis = ['Executada', 'Frustrada', 'Não realizada'];
 
-export default function VisitasLista({ visitas, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   if (visitas.length === 0) {
     return <Text style={styles.vazio}>Nenhuma visita programada.</Text>;
   }
@@ -21,7 +22,7 @@ export default function VisitasLista({ visitas, onAddPhoto, onCheckIn, onRegiste
           data={visitasEmAberto}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
-          renderItem={({ item }) => <VisitaCartao item={item} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+          renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
         />
       )}
       {visitasConcluidas.length > 0 && (
@@ -31,7 +32,7 @@ export default function VisitasLista({ visitas, onAddPhoto, onCheckIn, onRegiste
             data={visitasConcluidas}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => <VisitaCartao item={item} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+            renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
           />
         </>
       )}
@@ -39,7 +40,7 @@ export default function VisitasLista({ visitas, onAddPhoto, onCheckIn, onRegiste
   );
 }
 
-function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
   const [motivo, setMotivo] = useState(item.justificativa || '');
   const [motivoSalvo, setMotivoSalvo] = useState(Boolean(item.justificativa));
   const statusAtual = item.status || 'Pendente';
@@ -83,7 +84,12 @@ function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChan
           titulo="Antes do atendimento"
           textoVazio="Nenhuma foto antes anexada."
           acessibilidade="Foto antes do atendimento"
-          uri={item.fotoAntes}
+          foto={item.fotoAntes}
+          visitaId={item.id}
+          campoFoto="fotoAntes"
+          token={tokenFotos}
+          enviando={fotoEnviando === `${item.id}-fotoAntes`}
+          bloqueada={statusAtual === 'Executada'}
           onPress={() => onAddPhoto(item.id, 'fotoAntes')}
         />
         <FotoEtapa
@@ -91,7 +97,12 @@ function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChan
           textoVazio="Nenhuma foto depois anexada."
           acessibilidade="Foto depois do atendimento"
           observacao={item.servico === 'Aspiração - Liberar o uso' ? 'Obrigatória para registrar a saída.' : 'Opcional para este serviço.'}
-          uri={item.fotoDepois}
+          foto={item.fotoDepois}
+          visitaId={item.id}
+          campoFoto="fotoDepois"
+          token={tokenFotos}
+          enviando={fotoEnviando === `${item.id}-fotoDepois`}
+          bloqueada={statusAtual === 'Executada'}
           onPress={() => onAddPhoto(item.id, 'fotoDepois')}
         />
       </View>
@@ -162,26 +173,99 @@ function VisitaCartao({ item, onAddPhoto, onCheckIn, onRegisterDeparture, onChan
   );
 }
 
-function FotoEtapa({ titulo, textoVazio, acessibilidade, observacao, uri, onPress }) {
+function FotoEtapa({ titulo, textoVazio, acessibilidade, observacao, foto, visitaId, campoFoto, token, enviando, bloqueada, onPress }) {
+  const [erroImagem, setErroImagem] = useState(false);
+  const [uriImagem, setUriImagem] = useState('');
+  const [mostrarFotoAmpliada, setMostrarFotoAmpliada] = useState(false);
   const etapa = titulo.startsWith('Antes') ? 'antes' : 'depois';
+  const temFoto = Boolean(foto?.arquivoId);
+  const endereco = foto?.endereco || (foto ? `${foto.latitude}, ${foto.longitude}` : '');
+
+  useEffect(() => {
+    let ativo = true;
+    setErroImagem(false);
+    setUriImagem('');
+    if (!temFoto || !token) return () => { ativo = false; };
+
+    baixarFotoVisita(visitaId, campoFoto, foto.arquivoId, token)
+      .then((uri) => { if (ativo) setUriImagem(uri); })
+      .catch((erro) => {
+        if (!ativo) return;
+        setErroImagem(true);
+        if (__DEV__) console.warn('Falha ao carregar foto protegida da visita:', erro?.message || 'sem-detalhe');
+      });
+
+    return () => { ativo = false; };
+  }, [campoFoto, foto?.arquivoId, temFoto, token, visitaId]);
 
   return (
     <View style={styles.itemFoto}>
       <Text style={styles.tituloEtapaFoto}>{titulo}</Text>
-      {uri ? (
-        <Image accessibilityLabel={acessibilidade} source={{ uri }} style={styles.imagemFoto} />
+      {temFoto && token ? (
+        erroImagem ? (
+          <Text style={styles.fotoVazia}>Não foi possível carregar a foto. Confira a conexão e recarregue a tela.</Text>
+        ) : uriImagem ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ampliar ${acessibilidade}`}
+              onPress={() => setMostrarFotoAmpliada(true)}
+              style={styles.toqueImagem}
+            >
+              <Image
+                accessibilityLabel={acessibilidade}
+                source={{ uri: uriImagem }}
+                resizeMode="contain"
+                style={styles.imagemFoto}
+                onLoad={() => setErroImagem(false)}
+                onError={(evento) => {
+                  setErroImagem(true);
+                  if (__DEV__) console.warn('Falha ao carregar foto protegida da visita:', evento?.nativeEvent?.error || 'sem-detalhe');
+                }}
+              />
+            </Pressable>
+            <Modal
+              visible={mostrarFotoAmpliada}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setMostrarFotoAmpliada(false)}
+            >
+              <View style={styles.fotoAmpliadaFundo}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar foto ampliada"
+                  onPress={() => setMostrarFotoAmpliada(false)}
+                  style={styles.botaoFecharFoto}
+                >
+                  <Text style={styles.textoFecharFoto}>Fechar</Text>
+                </Pressable>
+                <Image
+                  accessibilityLabel={`${acessibilidade} ampliada`}
+                  source={{ uri: uriImagem }}
+                  resizeMode="contain"
+                  style={styles.imagemAmpliada}
+                />
+              </View>
+            </Modal>
+          </>
+        ) : <Text style={styles.fotoVazia}>Carregando foto…</Text>
       ) : (
-        <Text style={styles.fotoVazia}>{textoVazio}</Text>
+        <Text style={styles.fotoVazia}>{temFoto ? 'Carregando acesso à foto…' : textoVazio}</Text>
       )}
+      {foto?.capturadaEm ? <Text style={styles.metadadoFoto}>Registro do aparelho: {new Date(foto.capturadaEm).toLocaleString('pt-BR')}</Text> : null}
+      {foto?.enviadaEm ? <Text style={styles.metadadoFoto}>Recebida pelo servidor: {new Date(foto.enviadaEm).toLocaleString('pt-BR')}</Text> : null}
+      {endereco ? <Text style={styles.metadadoFoto}>Local registrado pelo aparelho: {endereco}</Text> : null}
       {observacao && <Text style={styles.observacaoFoto}>{observacao}</Text>}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${uri ? 'Alterar' : 'Adicionar'} foto ${etapa}`}
-        onPress={onPress}
-        style={({ pressed }) => [styles.botaoFoto, pressed && styles.pressionado]}
-      >
-        <Text style={styles.textoBotaoFoto}>{uri ? `Alterar foto ${etapa}` : `Adicionar foto ${etapa}`}</Text>
-      </Pressable>
+      {!bloqueada && <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${temFoto ? 'Alterar' : 'Adicionar'} foto ${etapa}`}
+          accessibilityState={{ disabled: enviando }}
+          disabled={enviando}
+          onPress={onPress}
+          style={({ pressed }) => [styles.botaoFoto, (pressed || enviando) && styles.pressionado]}
+        >
+          <Text style={styles.textoBotaoFoto}>{enviando ? 'Enviando foto…' : temFoto ? `Alterar foto ${etapa}` : `Adicionar foto ${etapa}`}</Text>
+        </Pressable>}
     </View>
   );
 }
@@ -219,7 +303,13 @@ const styles = StyleSheet.create({
   itemFoto: { borderTopColor: cores.borda, borderTopWidth: 1, marginTop: 8, paddingTop: 8 },
   tituloEtapaFoto: { color: cores.texto, fontSize: 14, fontWeight: '600' },
   fotoVazia: { color: cores.textoSecundario, fontSize: 13, marginTop: 6 },
-  imagemFoto: { borderRadius: 8, height: 150, marginTop: 8, width: '100%' },
+  metadadoFoto: { color: cores.textoSecundario, fontSize: 12, marginTop: 5 },
+  toqueImagem: { backgroundColor: cores.fundoCartao, borderRadius: 8, height: 170, marginTop: 8, overflow: 'hidden', width: '100%' },
+  imagemFoto: { height: '100%', width: '100%' },
+  fotoAmpliadaFundo: { backgroundColor: 'rgba(0, 0, 0, 0.94)', flex: 1, justifyContent: 'center' },
+  botaoFecharFoto: { alignSelf: 'flex-end', marginRight: 20, marginTop: 38, padding: 12 },
+  textoFecharFoto: { color: cores.branco, fontSize: 16, fontWeight: '600' },
+  imagemAmpliada: { flex: 1, marginBottom: 24, width: '100%' },
   botaoFoto: { alignItems: 'center', backgroundColor: cores.azulEscuro, borderRadius: 8, marginTop: 8, padding: 10 },
   textoBotaoFoto: { color: cores.branco, fontSize: 14, fontWeight: '600' },
   observacaoFoto: { color: cores.textoSecundario, fontSize: 12, marginTop: 4 },

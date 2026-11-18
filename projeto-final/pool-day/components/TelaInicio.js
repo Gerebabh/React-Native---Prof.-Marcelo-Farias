@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { cores } from '../styles/colors';
 
-export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos, agendamentosHoje, funcionarios, aoAbrirLocais, aoAbrirVisitas, aoAbrirEquipe, aoAdicionarServico }) {
+export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos, agendamentosHoje, visitasAtrasadas, funcionarios, aoAbrirLocais, aoAbrirVisitas, aoAbrirEquipe, aoAdicionarServico }) {
   return (
     <ScrollView contentContainerStyle={styles.conteudo}>
       <Text style={styles.titulo}>Olá, {nome}</Text>
@@ -12,11 +12,13 @@ export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos,
         <View style={styles.listaResumo}>
           <CartaoResumo titulo="Clientes ativos" valor={clientesAtivos} onPress={aoAbrirLocais} />
           <CartaoResumo titulo="Agendamentos de hoje" valor={agendamentosHoje} onPress={aoAbrirVisitas} />
+          <CartaoResumo titulo="Visitas em atraso" valor={visitasAtrasadas} onPress={aoAbrirVisitas} />
           {funcionarios > 0 && <CartaoResumo titulo="Funcionários" valor={funcionarios} onPress={aoAbrirEquipe} />}
         </View>
       ) : (
         <View style={styles.listaResumo}>
           <CartaoResumo titulo="Atendimentos de hoje" valor={agendamentosHoje} onPress={aoAbrirVisitas} />
+          <CartaoResumo titulo="Visitas em atraso" valor={visitasAtrasadas} onPress={aoAbrirVisitas} />
         </View>
       )}
 

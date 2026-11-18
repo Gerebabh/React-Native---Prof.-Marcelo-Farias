@@ -8,6 +8,7 @@ export default function TelaVisitas({
   responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao, produtosAplicados = [], onQuantidadeProduto,
   onLocal, onTratador, onAbrirCalendario, onSelecionarData, onFecharCalendario, onServico, onOrientacao, onAdicionarVisita,
   onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa,
+  tokenFotos, fotoEnviando,
 }) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -90,6 +91,8 @@ export default function TelaVisitas({
         )}
         <VisitasLista
           visitas={visitas}
+          tokenFotos={tokenFotos}
+          fotoEnviando={fotoEnviando}
           onAddPhoto={onAddPhoto}
           onCheckIn={onCheckIn}
           onRegisterDeparture={onRegisterDeparture}

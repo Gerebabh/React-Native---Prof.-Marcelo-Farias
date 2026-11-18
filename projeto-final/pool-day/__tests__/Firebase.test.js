@@ -16,10 +16,22 @@ jest.mock('firebase/app', () => ({
 jest.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: jest.fn(async (_auth, email) => ({ user: { uid: 'tratador-1', email } })),
   deleteUser: jest.fn(async () => {}),
-  getAuth: jest.fn((app) => ({ nome: app?.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' })),
+  getAuth: jest.fn((app) => {
+    const auth = { nome: app?.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' };
+    if (app?.name !== 'pool-day-convites') Object.defineProperty(auth, 'currentUser', {
+      value: { getIdToken: jest.fn(async () => 'token-firebase') }, enumerable: false,
+    });
+    return auth;
+  }),
   getReactNativePersistence: jest.fn(() => 'persistencia-nativa'),
   inMemoryPersistence: 'persistencia-em-memoria',
-  initializeAuth: jest.fn((app) => ({ nome: app.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' })),
+  initializeAuth: jest.fn((app) => {
+    const auth = { nome: app.name === 'pool-day-convites' ? 'auth-convite-teste' : 'auth-teste' };
+    if (app.name !== 'pool-day-convites') Object.defineProperty(auth, 'currentUser', {
+      value: { getIdToken: jest.fn(async () => 'token-firebase') }, enumerable: false,
+    });
+    return auth;
+  }),
   onAuthStateChanged: jest.fn(),
   sendPasswordResetEmail: jest.fn(async () => {}),
   signInWithEmailAndPassword: jest.fn(async (_auth, email) => ({ user: { uid: 'tratador-1', email } })),
@@ -47,7 +59,6 @@ function carregarFirebase() {
   process.env.EXPO_PUBLIC_FIREBASE_API_KEY = 'api-teste';
   process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN = 'pool-day.test';
   process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID = 'pool-day-teste';
-  process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET = 'pool-day-teste.firebasestorage.app';
   process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = '123';
   process.env.EXPO_PUBLIC_FIREBASE_APP_ID = 'app-teste';
   jest.resetModules();
@@ -76,6 +87,11 @@ describe('serviço Firebase', () => {
       { nome: 'app-teste', name: '[DEFAULT]' },
       { persistence: 'persistencia-nativa' }
     );
+  });
+
+  test('obtém o token atual do Firebase Authentication', async () => {
+    const { firebase } = carregarFirebase();
+    await expect(firebase.obterToken()).resolves.toBe('token-firebase');
   });
 
   test('localiza o perfil, o papel e a empresa pelo usuário autenticado', async () => {
