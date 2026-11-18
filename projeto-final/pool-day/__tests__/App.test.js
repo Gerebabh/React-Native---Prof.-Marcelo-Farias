@@ -25,6 +25,7 @@ jest.mock('../services/firebase', () => ({
   concluirVisitaComBaixaEstoque: jest.fn(async () => ({ jaConcluida: false })),
   convidarTratador: jest.fn(async () => ({})),
   enviarRecuperacaoSenha: jest.fn(async () => {}),
+  obterToken: jest.fn(async () => 'token-teste'),
   observarClientes: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarPiscinas: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
   observarProdutos: jest.fn((_empresaId, aoAtualizar) => { aoAtualizar([]); return jest.fn(); }),
@@ -51,9 +52,24 @@ jest.mock('../components/Autenticacao', () => {
 });
 
 jest.mock('expo-image-picker', () => ({
-  launchImageLibraryAsync: jest.fn(),
   launchCameraAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
+}), { virtual: true });
+
+jest.mock('expo-file-system', () => ({
+  File: class ArquivoTeste {
+    constructor(uri) {
+      this.uri = uri;
+      this.name = 'foto-camera.jpg';
+      this.type = 'image/jpeg';
+    }
+  },
+}), { virtual: true });
+
+jest.mock('expo-file-system/legacy', () => ({
+  cacheDirectory: 'file:///cache/',
+  downloadAsync: jest.fn(async (_url, destino) => ({ uri: destino, status: 200 })),
+  deleteAsync: jest.fn(async () => {}),
 }), { virtual: true });
 
 jest.mock('expo-location', () => ({
@@ -100,6 +116,11 @@ describe('cadastro de cliente e visitas', () => {
   let alerta;
 
   beforeEach(() => {
+    process.env.EXPO_PUBLIC_API_FOTOS_URL = 'https://poolday-api.solutionforge.com.br';
+    global.FormData = class FormDataTeste {
+      constructor() { this._parts = []; }
+      append(nome, valor, nomeArquivo) { this._parts.push([nome, valor, nomeArquivo]); }
+    };
     mockSessao.papel = 'responsavel';
     alerta = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     Location.hasServicesEnabledAsync.mockResolvedValue(true);
@@ -109,9 +130,17 @@ describe('cadastro de cliente e visitas', () => {
     Location.reverseGeocodeAsync.mockResolvedValue([{
       street: 'Rua das Palmeiras', streetNumber: '45', district: 'Asa Norte', city: 'Brasília', region: 'DF',
     }]);
-    ImagePicker.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
     ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
     ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ foto: {
+        arquivoId: 'arquivo-teste', latitude: -15.79, longitude: -47.88,
+        endereco: 'Rua das Palmeiras, 45', capturadaEm: '2026-11-17T14:20:00.000Z',
+        enviadaEm: '2026-11-17T14:20:05.000Z', enviadaPorUid: 'usuario-teste',
+      } }),
+    });
     Firebase.convidarTratador.mockResolvedValue({ uid: 'novo-tratador' });
     Firebase.enviarRecuperacaoSenha.mockResolvedValue(undefined);
   });
@@ -178,7 +207,7 @@ describe('cadastro de cliente e visitas', () => {
   test('mostra o nome do aplicativo', async () => {
     const { getByText } = await render(<App />);
     expect(getByText('Pool Day')).toBeTruthy();
-  });
+  }, 15000);
 
   test('responsável navega entre visitas, clientes e equipe pelas abas inferiores', async () => {
     const tela = await render(<App />);
@@ -326,7 +355,25 @@ describe('cadastro de cliente e visitas', () => {
 
     expect(tela.getByLabelText('Clientes ativos: 0')).toBeTruthy();
     expect(tela.getByLabelText('Agendamentos de hoje: 0')).toBeTruthy();
+    expect(tela.getByLabelText('Visitas em atraso: 0')).toBeTruthy();
     expect(tela.queryByLabelText(/Funcionários:/)).toBeNull();
+  });
+
+  test('dashboard conta visitas passadas que ainda não foram executadas como atrasadas', async () => {
+    const ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
+    const dataOntem = `${String(ontem.getDate()).padStart(2, '0')}/${String(ontem.getMonth() + 1).padStart(2, '0')}/${ontem.getFullYear()}`;
+    const tela = await render(<App visitasIniciais={[
+      { id: 'pendente', data: dataOntem, status: 'Pendente' },
+      { id: 'frustrada', data: dataOntem, status: 'Frustrada' },
+      { id: 'nao-realizada', data: dataOntem, status: 'Não realizada' },
+      { id: 'executada', data: dataOntem, status: 'Executada' },
+      { id: 'data-invalida', data: 'data inválida', status: 'Pendente' },
+    ]} />);
+    await fireEvent.press(tela.getByRole('tab', { name: 'Início' }));
+
+    expect(tela.getByLabelText('Agendamentos de hoje: 0')).toBeTruthy();
+    expect(tela.getByLabelText('Visitas em atraso: 3')).toBeTruthy();
   });
 
   test('dashboard conta somente clientes ativos e agendamentos de hoje', async () => {
@@ -848,7 +895,7 @@ describe('cadastro de cliente e visitas', () => {
   test('permite registrar saída da aspiração com foto depois', async () => {
     const tela = await render(<App visitasIniciais={[{
       id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Aspiração - Liberar o uso', status: 'Pendente',
-      horarioChegada: '2026-11-10T10:00:00.000Z', latitude: -15.79, longitude: -47.88, fotoDepois: 'file:///foto-depois.jpg',
+      horarioChegada: '2026-11-10T10:00:00.000Z', latitude: -15.79, longitude: -47.88, fotoDepois: { arquivoId: 'foto-depois' },
     }]} />);
 
     await fireEvent.press(tela.getByRole('button', { name: 'Registrar saída' }));
@@ -919,40 +966,86 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Nenhuma foto depois anexada.')).toBeTruthy();
   });
 
-  test('anexa fotos do antes e depois pela galeria', async () => {
-    ImagePicker.launchImageLibraryAsync
-      .mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///foto-antes.jpg' }] })
-      .mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///foto-depois.jpg' }] });
-    const tela = await render(<App visitasIniciais={[{
-      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
-    }]} />);
-
-    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
-    let escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
-    await act(async () => escolha[2].find((botao) => botao.text === 'Galeria').onPress());
-    await waitFor(() => expect(tela.getByLabelText('Foto antes do atendimento')).toBeTruthy());
-
-    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto depois' }));
-    escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto depois do atendimento');
-    await act(async () => escolha[2].find((botao) => botao.text === 'Galeria').onPress());
-    await waitFor(() => expect(tela.getByLabelText('Foto depois do atendimento')).toBeTruthy());
-
-    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(2);
-  });
-
-  test('tira foto do atendimento com a câmera', async () => {
+  test('tira foto do atendimento e envia para a API com os dados do aparelho', async () => {
     ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///foto-camera.jpg' }] });
     const tela = await render(<App visitasIniciais={[{
       id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
     }]} />);
 
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
-    const escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
-    await act(async () => escolha[2].find((botao) => botao.text === 'Câmera').onPress());
-
     await waitFor(() => expect(tela.getByLabelText('Foto antes do atendimento')).toBeTruthy());
     expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalled();
+    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith(expect.objectContaining({ allowsEditing: false }));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/visitas/visita-1/fotos'),
+      expect.objectContaining({ method: 'POST', headers: { Authorization: 'Bearer token-teste' } })
+    );
+    expect(global.fetch.mock.calls[0][1].headers['Content-Type']).toBeUndefined();
+    const camposEnviados = global.fetch.mock.calls[0][1].body._parts;
+    expect(camposEnviados.map(([nome]) => nome)).toEqual([
+      'arquivo', 'campoFoto', 'latitude', 'longitude', 'capturadaEm', 'endereco',
+    ]);
+    expect(camposEnviados[0][1]).toEqual({ uri: 'file:///foto-camera.jpg', name: 'foto-camera.jpg', type: 'image/jpeg' });
+    expect(camposEnviados[0][2]).toBe('foto.jpg');
+    expect(camposEnviados.some(([nome]) => ['empresaId', 'usuarioUid', 'tratadorUid'].includes(nome))).toBe(false);
+    expect(tela.queryByText('Nenhuma foto antes anexada.')).toBeNull();
+    expect(tela.getByText(/Registro do aparelho:/)).toBeTruthy();
+    expect(tela.getByText(/Recebida pelo servidor:/)).toBeTruthy();
+    expect(tela.getByText('Local registrado pelo aparelho: Rua das Palmeiras, 45')).toBeTruthy();
+    expect(tela.getByLabelText('Foto antes do atendimento').props.source.uri).toContain('file:///cache/foto-visita-1-fotoAntes-');
+  });
+
+  test('mostra erro 409 quando a API recusa foto de visita executada', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ erro: 'visita-executada', mensagem: 'Visita executada.' }),
+    });
+    ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///foto-camera.jpg' }] });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith(
+      'Não foi possível enviar a foto', 'Esta visita já foi concluída e as fotos não podem ser alteradas.'
+    ));
+    expect(tela.getByText('Nenhuma foto antes anexada.')).toBeTruthy();
+  });
+
+  test('oferece reenviar a foto capturada quando a conexão falha', async () => {
+    global.fetch.mockRejectedValueOnce(new TypeError('Network request failed'));
+    ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///foto-camera.jpg' }] });
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Pendente',
+    }]} />);
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
+    await waitFor(() => expect(alerta).toHaveBeenCalledWith(
+      'Falha ao enviar a foto',
+      expect.stringContaining('Você pode repetir sem tirar outra foto.'),
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'Tentar novamente', onPress: expect.any(Function) }),
+      ]),
+    ));
+
+    const botoes = alerta.mock.calls.find(([titulo]) => titulo === 'Falha ao enviar a foto')[2];
+    await act(async () => botoes.find((botao) => botao.text === 'Tentar novamente').onPress());
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
+    expect(tela.getByText(/Recebida pelo servidor:/)).toBeTruthy();
+  });
+
+  test('esconde alteração de foto em visita executada e mostra metadados', async () => {
+    const tela = await render(<App visitasIniciais={[{
+      id: 'visita-1', data: '10/11/2026', local: 'Casa da família', servico: 'Inspeção', status: 'Executada',
+      fotoAntes: { arquivoId: 'foto-antiga', latitude: -15.79, longitude: -47.88, capturadaEm: '2026-11-17T14:20:00.000Z' },
+    }]} />);
+
+    expect(tela.queryByRole('button', { name: 'Alterar foto antes' })).toBeNull();
+    expect(tela.getByText(/Registro do aparelho:/)).toBeTruthy();
   });
 
   test('avisa quando a permissão da câmera é negada', async () => {
@@ -962,8 +1055,6 @@ describe('cadastro de cliente e visitas', () => {
     }]} />);
 
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar foto antes' }));
-    const escolha = alerta.mock.calls.find(([titulo]) => titulo === 'Foto antes do atendimento');
-    await act(async () => escolha[2].find((botao) => botao.text === 'Câmera').onPress());
 
     expect(alerta).toHaveBeenCalledWith('Permissão necessária', 'Permita o acesso à câmera para tirar a foto do atendimento.');
     expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();

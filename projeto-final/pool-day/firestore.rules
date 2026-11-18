@@ -33,6 +33,11 @@ service cloud.firestore {
         && get(caminhoMembro(empresaId, request.auth.uid)).data.papel == 'tratador';
     }
 
+    function naoMexeEmFotos() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['fotoAntes', 'fotoDepois']);
+    }
+
     function quantidadeNaUnidadeDoEstoque(quantidade, unidadeDose, unidadeEstoque) {
       return unidadeDose == unidadeEstoque ? quantidade
         : unidadeDose == 'g' && unidadeEstoque == 'kg' ? quantidade / 1000.0
@@ -240,8 +245,10 @@ service cloud.firestore {
           || (tratador(empresaId) && resource.data.tratadorUid == request.auth.uid);
         allow list: if responsavel(empresaId)
           || (tratador(empresaId) && resource.data.tratadorUid == request.auth.uid);
-        allow create, delete: if responsavel(empresaId);
-        allow update: if responsavel(empresaId)
+        allow create: if responsavel(empresaId)
+          && !request.resource.data.keys().hasAny(['fotoAntes', 'fotoDepois']);
+        allow delete: if responsavel(empresaId);
+        allow update: if (responsavel(empresaId) && naoMexeEmFotos())
           || (tratador(empresaId)
             && resource.data.tratadorUid == request.auth.uid
             && request.resource.data.tratadorUid == request.auth.uid
@@ -249,7 +256,7 @@ service cloud.firestore {
               'status', 'justificativa', 'horarioChegada', 'latitude',
               'longitude', 'enderecoChegada', 'horarioSaida',
               'latitudeSaida', 'longitudeSaida', 'enderecoSaida',
-              'fotoAntes', 'fotoDepois', 'estoqueBaixado', 'estoqueBaixadoEm',
+              'estoqueBaixado', 'estoqueBaixadoEm',
               'custosProdutos', 'custoTotalProdutos'
             ])
             && (request.resource.data.status != 'Executada'
