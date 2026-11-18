@@ -55,11 +55,49 @@ Na tela Clientes, cada piscina permite configurar um padrão de tratamento norma
 
 ## Capturas de tela
 
-Adicionar aqui capturas reais do aplicativo no dispositivo: painel, clientes, agenda/registro de visita e produtos/calculadora.
+### Painel inicial
+
+![Painel inicial do Pool Day](screenshots/01-painel-inicial.jpeg)
+
+### Clientes e tratamento padrão
+
+![Cadastro do cliente e padrão de tratamento da piscina](screenshots/02-clientes-e-tratamento-padrao.jpeg)
+
+### Edição do padrão de tratamento
+
+![Edição das quantidades e unidades do padrão de produtos, com botão para salvar](screenshots/10-edicao-padrao-tratamento.jpeg)
+
+### Cadastro de cliente
+
+![Formulário de cadastro de cliente e piscina](screenshots/03-cadastro-cliente.jpeg)
+
+### Agenda de visitas
+
+![Lista de visitas abertas e concluídas](screenshots/04-agenda-de-visitas.jpeg)
+
+### Cadastro de serviço
+
+![Formulário para cadastrar uma visita](screenshots/05-cadastro-de-servico.jpeg)
+
+### Agenda do tratador
+
+![Visitas atribuídas ao tratador](screenshots/06-agenda-do-tratador.jpeg)
+
+### Produtos e estoque
+
+![Produtos cadastrados e quantidades em estoque](screenshots/07-estoque-de-produtos.jpeg)
+
+### Cadastro de produto
+
+![Formulário de cadastro de produto](screenshots/08-cadastro-de-produto.jpeg)
+
+### Calculadora de produtos
+
+![Calculadora de tratamento de choque](screenshots/09-calculadora-de-produtos.jpeg)
 
 ## Integrante e divisão do trabalho
 
-- Geraldo Lucio Santos — projeto individual: definição da proposta, desenvolvimento das telas e funcionalidades, integração com Firebase, testes e documentação.
+- Geraldo Lucio Carvalho dos Santos — matrícula 2424290069. Projeto individual: definição da proposta, desenvolvimento das telas e funcionalidades, integração com Firebase, testes e documentação.
 
 ## Documentação
 
