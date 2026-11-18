@@ -58,7 +58,7 @@ export default function CabecalhoApp({ usuario, perfil, aoSair, aoAtualizarPerfi
 }
 
 const styles = StyleSheet.create({
-  fundo: { justifyContent: 'center', minHeight: 126 },
+  fundo: { justifyContent: 'center', minHeight: 126, width: '100%' },
   sobreposicao: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.18)' },
   conteudo: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16 },
   textos: { flex: 1, marginRight: 8 },
