@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -31,7 +32,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": false,
+          "photosPermission": "O Pool Day usa suas fotos para você escolher uma imagem de perfil.",
           "cameraPermission": "O Pool Day usa a câmera para registrar fotos antes e depois do atendimento.",
           "microphonePermission": false
         }

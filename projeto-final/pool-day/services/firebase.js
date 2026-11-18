@@ -537,6 +537,26 @@ export async function buscarPerfil(usuarioId) {
   };
 }
 
+export async function atualizarNomePerfil(usuarioId, empresaId, nome) {
+  verificarConfiguracao();
+  const nomeAtualizado = typeof nome === 'string' ? nome.trim() : '';
+  if (!nomeAtualizado || nomeAtualizado.length > 100) {
+    const erro = new Error('Informe um nome com até 100 caracteres.');
+    erro.code = 'perfil/nome-invalido';
+    throw erro;
+  }
+  if (!auth.currentUser || auth.currentUser.uid !== usuarioId) {
+    const erro = new Error('Entre novamente para editar seu perfil.');
+    erro.code = 'nao-autenticado';
+    throw erro;
+  }
+  const lote = writeBatch(banco);
+  lote.update(doc(banco, 'usuarios', usuarioId), { nome: nomeAtualizado });
+  lote.update(doc(banco, 'empresas', empresaId, 'membros', usuarioId), { nome: nomeAtualizado });
+  await lote.commit();
+  return nomeAtualizado;
+}
+
 export function mensagemErroAutenticacao(erro) {
   const mensagens = {
     'firebase/configuration-not-found': 'A autenticação ainda não foi configurada. Confira as instruções do projeto.',

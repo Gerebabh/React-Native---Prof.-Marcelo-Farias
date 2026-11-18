@@ -183,7 +183,14 @@ service cloud.firestore {
       allow get: if autenticado() && request.auth.uid == usuarioId;
       allow create: if criarPerfilDoTratador(request.resource.data.empresaId, usuarioId)
         || criarPerfilDoResponsavel(request.resource.data.empresaId, usuarioId);
-      allow list, update, delete: if false;
+      allow update: if autenticado()
+        && request.auth.uid == usuarioId
+        && membroAtivo(resource.data.empresaId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100;
+      allow list, delete: if false;
     }
 
     match /empresas/{empresaId} {
@@ -197,7 +204,14 @@ service cloud.firestore {
         allow list: if responsavel(empresaId);
         allow create: if criarVinculoDoTratador(empresaId, membroId)
           || criarVinculoDoResponsavel(empresaId, membroId);
-        allow update, delete: if false;
+        allow update: if autenticado()
+          && request.auth.uid == membroId
+          && membroAtivo(empresaId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome'])
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() > 0
+          && request.resource.data.nome.size() <= 100;
+        allow delete: if false;
       }
 
       match /clientes/{clienteId} {

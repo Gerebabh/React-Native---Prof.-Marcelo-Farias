@@ -5,6 +5,7 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -154,6 +155,10 @@ export default function Autenticacao({ children }) {
     }
   }
 
+  function atualizarPerfil(perfilAtualizado) {
+    setPerfil((perfilAnterior) => ({ ...perfilAnterior, ...perfilAtualizado }));
+  }
+
   if (estado === 'carregando' || estado === 'carregando-perfil') {
     return (
       <SafeAreaView style={styles.areaCarregando}>
@@ -164,7 +169,7 @@ export default function Autenticacao({ children }) {
   }
 
   if (estado === 'autenticado') {
-    return children({ usuario, perfil, aoSair: fazerLogout });
+    return children({ usuario, perfil, aoSair: fazerLogout, aoAtualizarPerfil: atualizarPerfil });
   }
 
   return (
@@ -192,6 +197,13 @@ function TelaLogin({ erro, firebaseAtivo, carregando, carregandoCadastro, onEntr
   const [emailRecuperacao, setEmailRecuperacao] = useState('');
   const [erroRecuperacao, setErroRecuperacao] = useState('');
   const [enviandoRecuperacao, setEnviandoRecuperacao] = useState(false);
+  const [tecladoAberto, setTecladoAberto] = useState(false);
+
+  useEffect(() => {
+    const aoAbrir = Keyboard.addListener('keyboardDidShow', () => setTecladoAberto(true));
+    const aoFechar = Keyboard.addListener('keyboardDidHide', () => setTecladoAberto(false));
+    return () => { aoAbrir.remove(); aoFechar.remove(); };
+  }, []);
 
   async function enviarRecuperacao() {
     if (!emailRecuperacao.trim()) {
@@ -221,10 +233,14 @@ function TelaLogin({ erro, firebaseAtivo, carregando, carregandoCadastro, onEntr
       >
         <StatusBar style="light" />
         <View style={styles.sobreposicao} />
-        <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView contentContainerStyle={styles.conteudoLogin} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+          <ScrollView
+            contentContainerStyle={[styles.conteudoLogin, tecladoAberto && styles.conteudoLoginComTeclado]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             <View style={styles.cartaoLogin}>
-              <Image source={require('../assets/logo-poolday.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="Logo Pool Day" />
+              <Image source={require('../assets/logo-poolday.png')} style={[styles.logo, tecladoAberto && styles.logoComTeclado]} resizeMode="contain" accessibilityLabel="Logo Pool Day" />
               <Text style={styles.tituloLogin}>{mostrarCadastro ? 'Cadastre sua empresa' : 'Acesse o Pool Day'}</Text>
               <Text style={styles.subtituloLogin}>{mostrarCadastro ? 'Crie uma conta para começar a usar o Pool Day.' : 'Entre com a conta da sua empresa.'}</Text>
 
@@ -357,8 +373,10 @@ const styles = StyleSheet.create({
   sobreposicao: { ...StyleSheet.absoluteFillObject, backgroundColor: cores.sobreposicaoLogin },
   teclado: { flex: 1, justifyContent: 'center' },
   conteudoLogin: { flexGrow: 1, justifyContent: 'center', padding: 22 },
+  conteudoLoginComTeclado: { justifyContent: 'flex-start', paddingHorizontal: 14, paddingVertical: 8 },
   cartaoLogin: { alignSelf: 'center', backgroundColor: cores.cartaoLogin, borderRadius: 20, maxWidth: 430, padding: 24, width: '100%' },
   logo: { alignSelf: 'center', height: 170, marginBottom: 8, width: 220 },
+  logoComTeclado: { height: 70, marginBottom: 2 },
   tituloLogin: { color: cores.azulEscuro, fontSize: 24, fontWeight: '700', textAlign: 'center' },
   subtituloLogin: { color: cores.textoSecundario, fontSize: 14, marginBottom: 20, marginTop: 6, textAlign: 'center' },
   campoLogin: { backgroundColor: cores.fundoCartao, borderColor: cores.borda, borderRadius: 9, borderWidth: 1, color: cores.texto, fontSize: 16, marginTop: 10, paddingHorizontal: 13, paddingVertical: 12 },
