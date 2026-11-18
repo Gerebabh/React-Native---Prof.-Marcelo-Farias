@@ -47,7 +47,7 @@ export default function App(props) {
       <Autenticacao>
         {({ usuario, perfil, aoSair, aoAtualizarPerfil }) => (
           <ContextoSessao.Provider value={{ usuario, perfil, aoSair, aoAtualizarPerfil }}>
-            <SafeAreaView style={styles.areaSegura}>
+            <SafeAreaView style={[styles.areaSegura, Platform.OS === 'web' && styles.areaSeguraWeb]}>
               <ConteudoApp {...props} />
             </SafeAreaView>
           </ContextoSessao.Provider>
@@ -931,6 +931,7 @@ function carregarProdutosPiscina(piscina, produtos) {
 
 const styles = StyleSheet.create({
   areaSegura: { flex: 1, backgroundColor: cores.fundoTela },
+  areaSeguraWeb: { alignSelf: 'center', maxWidth: 480, width: '100%' },
   teclado: { flex: 1 },
   conteudo: { flex: 1, backgroundColor: cores.fundoTela },
   areaRolavel: { flex: 1 },
