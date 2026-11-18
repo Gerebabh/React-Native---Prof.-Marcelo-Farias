@@ -63,6 +63,10 @@ Na tela Clientes, cada piscina permite configurar um padrão de tratamento norma
 
 ![Cadastro do cliente e padrão de tratamento da piscina](screenshots/02-clientes-e-tratamento-padrao.jpeg)
 
+### Edição do padrão de tratamento
+
+![Edição das quantidades e unidades do padrão de produtos, com botão para salvar](screenshots/10-edicao-padrao-tratamento.jpeg)
+
 ### Cadastro de cliente
 
 ![Formulário de cadastro de cliente e piscina](screenshots/03-cadastro-cliente.jpeg)
