@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { cores } from '../styles/colors';
-import CalculadoraProdutos from './CalculadoraProdutos';
 
 export default function TelaProdutos({ produtos, onSalvar }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
@@ -57,7 +56,6 @@ export default function TelaProdutos({ produtos, onSalvar }) {
   return (
     <View style={styles.container}>
       <Text style={styles.titulo}>Produtos e estoque</Text>
-      <CalculadoraProdutos produtos={produtos} />
       {mostrarFormulario ? (
         <View style={styles.formulario}>
           <Text style={styles.tituloFormulario}>{produtoEditando ? 'Editar produto' : 'Novo produto'}</Text>

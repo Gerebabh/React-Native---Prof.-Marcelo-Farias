@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { cores } from '../styles/colors';
+import CalculadoraProdutos from './CalculadoraProdutos';
 
-export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos, agendamentosHoje, visitasAtrasadas, funcionarios, aoAbrirLocais, aoAbrirVisitas, aoAbrirEquipe, aoAdicionarServico }) {
+export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos, agendamentosHoje, visitasAtrasadas, funcionarios, produtos = [], aoAbrirLocais, aoAbrirVisitas, aoAbrirEquipe, aoAdicionarServico }) {
+  const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
+
   return (
     <ScrollView contentContainerStyle={styles.conteudo}>
       <Text style={styles.titulo}>Olá, {nome}</Text>
@@ -30,6 +34,16 @@ export default function TelaInicio({ nome, empresa, responsavel, clientesAtivos,
       >
         <Text style={styles.textoBotao}>{responsavel ? 'Adicionar serviço' : 'Ver minhas visitas'}</Text>
       </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: mostrarCalculadora }}
+        onPress={() => setMostrarCalculadora((aberta) => !aberta)}
+        android_ripple={{ color: cores.azulClaro }}
+        style={({ pressed }) => [styles.botaoCalculadora, pressed && styles.pressionado]}
+      >
+        <Text style={styles.textoBotaoCalculadora}>{mostrarCalculadora ? 'Fechar calculadora' : 'Calculadora de produtos'}</Text>
+      </Pressable>
+      {mostrarCalculadora && <CalculadoraProdutos produtos={produtos} />}
     </ScrollView>
   );
 }
@@ -61,4 +75,6 @@ const styles = StyleSheet.create({
   botao: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 8, marginTop: 18, overflow: 'hidden', padding: 14 },
   pressionado: { opacity: 0.85 },
   textoBotao: { color: cores.branco, fontSize: 15, fontWeight: '600' },
+  botaoCalculadora: { alignItems: 'center', backgroundColor: cores.branco, borderColor: cores.azulPiscina, borderRadius: 8, borderWidth: 1, marginTop: 10, overflow: 'hidden', padding: 14 },
+  textoBotaoCalculadora: { color: cores.azulPiscina, fontSize: 15, fontWeight: '600' },
 });

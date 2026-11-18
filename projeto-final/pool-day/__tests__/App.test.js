@@ -19,6 +19,7 @@ const fireEvent = {
 
 jest.mock('../services/firebase', () => ({
   atualizarClienteAtivo: jest.fn(async () => {}),
+  atualizarClienteEPiscinas: jest.fn(async () => {}),
   atualizarProduto: jest.fn(async () => {}),
   atualizarTratamentoPadrao: jest.fn(async () => {}),
   atualizarVisita: jest.fn(async () => {}),
@@ -98,11 +99,21 @@ jest.mock('expo-location', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   const { View } = require('react-native');
+  const contextoReal = jest.requireActual('react-native-safe-area-context');
+  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { x: 0, y: 0, width: 360, height: 800 };
   return {
-    SafeAreaProvider: ({ children }) => React.createElement(View, null, children),
+    ...contextoReal,
+    SafeAreaProvider: ({ children }) => React.createElement(
+      contextoReal.SafeAreaFrameContext.Provider,
+      { value: frame },
+      React.createElement(contextoReal.SafeAreaInsetsContext.Provider, { value: insets }, children)
+    ),
     SafeAreaView: ({ children, ...props }) => React.createElement(View, props, children),
   };
 });
+
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 jest.mock('@react-native-community/datetimepicker', () => {
   const React = require('react');
@@ -168,6 +179,8 @@ describe('cadastro de cliente e visitas', () => {
   async function render(elemento) {
     const tela = await renderOriginal(elemento);
     await fireEvent.press(tela.getByRole('tab', { name: mockSessao.papel === 'tratador' ? 'Minhas visitas' : 'Visitas' }));
+    const primeiraVisita = tela.queryAllByRole('button', { name: /^Expandir visita:/ })[0];
+    if (primeiraVisita) await fireEvent.press(primeiraVisita);
     return tela;
   }
 
@@ -193,7 +206,9 @@ describe('cadastro de cliente e visitas', () => {
       await waitFor(() => expect(Firebase.salvarPiscina).toHaveBeenCalled());
     }
 
-    if (estavaEmVisitas) await fireEvent.press(tela.getByRole('tab', { name: 'Visitas' }));
+    if (estavaEmVisitas && !tela.queryByRole('button', { name: 'Adicionar visita' })) {
+      await fireEvent.press(tela.getByRole('tab', { name: 'Visitas' }));
+    }
   }
 
   async function renderNaAba(elemento, nomeAba) {
@@ -339,7 +354,7 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByPlaceholderText('Cliente')).toBeTruthy();
     await preencherLocal(tela);
 
-    expect(tela.getByText('Próximas visitas')).toBeTruthy();
+    expect(tela.getByText('Novo serviço')).toBeTruthy();
     expect(tela.getByRole('button', { name: 'Selecionar data da visita' })).toBeTruthy();
     expect(tela.getByText('Pessoa Teste (eu)')).toBeTruthy();
     await fireEvent.press(tela.getByRole('button', { name: 'Selecionar data da visita' }));
@@ -536,9 +551,51 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByRole('button', { name: 'Desativar cliente: Casa da família' })).toBeTruthy();
   });
 
-  test('deixa a calculadora de choque disponível na aba Produtos', async () => {
-    const tela = await renderNaAba(<App />, 'Produtos');
+  test('edita os dados do cliente e da piscina cadastrada', async () => {
+    const cliente = { id: 'cliente-1', nome: 'Casa da família', ativo: true };
+    const piscina = {
+      id: 'piscina-1', localId: 'local-1', clienteId: 'cliente-1', cliente: 'Casa da família',
+      endereco: 'Rua das Flores, 10', tipoPiscina: 'Fibra', litragem: 13000,
+    };
+    Firebase.observarClientes.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([cliente]); return jest.fn(); });
+    Firebase.observarPiscinas.mockImplementationOnce((_empresaId, aoAtualizar) => { aoAtualizar([piscina]); return jest.fn(); });
+    const tela = await renderNaAba(<App />, 'Clientes');
 
+    await fireEvent.press(tela.getByRole('button', { name: 'Editar dados do cliente: Casa da família' }));
+    await fireEvent.changeText(tela.getByLabelText('Cliente'), 'Casa da família nova');
+    await fireEvent.changeText(tela.getByLabelText('Endereço'), 'Rua das Flores, 20');
+    await fireEvent.press(tela.getByText('Vinil'));
+    await fireEvent.changeText(tela.getByLabelText('Litragem em litros (ex.: 13000)'), '14500');
+    await fireEvent.press(tela.getByRole('button', { name: 'Salvar alterações' }));
+
+    await waitFor(() => expect(Firebase.atualizarClienteEPiscinas).toHaveBeenCalledWith(
+      'empresa-teste', 'cliente-1', [piscina], 'piscina-1', {
+        cliente: 'Casa da família nova', endereco: 'Rua das Flores, 20', tipoPiscina: 'Vinil', litragem: 14500,
+      }
+    ));
+    expect(tela.getByText('Casa da família nova')).toBeTruthy();
+    expect(tela.getByText('Endereço: Rua das Flores, 20')).toBeTruthy();
+    expect(tela.getByText('Piscina de Vinil • 14500 L')).toBeTruthy();
+    expect(Firebase.salvarPiscina).not.toHaveBeenCalled();
+  });
+
+  test('abre a calculadora pelo Início para o responsável', async () => {
+    const tela = await renderNaAba(<App />, 'Início');
+
+    expect(tela.queryByText('Calculadora de tratamento de choque')).toBeNull();
+    await fireEvent.press(tela.getByRole('button', { name: 'Calculadora de produtos' }));
+    expect(tela.getByText('Calculadora de tratamento de choque')).toBeTruthy();
+  });
+
+  test('deixa o tratador abrir a calculadora pelo Início', async () => {
+    mockSessao.papel = 'tratador';
+    Firebase.observarProdutos.mockImplementationOnce((_empresaId, aoAtualizar) => {
+      aoAtualizar([{ id: 'cloro', nome: 'Cloro', doseChoque: 15, unidadeDose: 'g' }]);
+      return jest.fn();
+    });
+    const tela = await renderNaAba(<App />, 'Início');
+
+    await fireEvent.press(tela.getByRole('button', { name: 'Calculadora de produtos' }));
     expect(tela.getByText('Calculadora de tratamento de choque')).toBeTruthy();
   });
 
@@ -700,7 +757,7 @@ describe('cadastro de cliente e visitas', () => {
     await fireEvent.press(tela.getByRole('button', { name: 'Adicionar visita' }));
 
     expect(alerta).toHaveBeenCalledWith('Data inválida', 'A data da visita não pode ser anterior a hoje.');
-    expect(tela.getByText('Nenhuma visita programada.')).toBeTruthy();
+    expect(tela.getByText('Novo serviço')).toBeTruthy();
   });
 
   test('exige padrão de produto para serviço de aplicar produtos', async () => {

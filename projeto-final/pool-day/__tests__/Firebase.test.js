@@ -52,7 +52,7 @@ jest.mock('firebase/firestore', () => ({
   }),
   runTransaction: jest.fn(async (_banco, callback) => callback({ get: jest.fn(), update: jest.fn() })),
   updateDoc: jest.fn(async () => {}),
-  writeBatch: jest.fn(() => ({ set: jest.fn(), commit: jest.fn(async () => {}) })),
+  writeBatch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), commit: jest.fn(async () => {}) })),
 }));
 
 function carregarFirebase() {
@@ -258,6 +258,27 @@ describe('serviço Firebase', () => {
     expect(lote.set).toHaveBeenNthCalledWith(1, expect.any(Object), expect.objectContaining({
       nome: 'Casa da família', ativo: true, criadaPorUid: 'responsavel-1',
     }));
+    expect(lote.commit).toHaveBeenCalled();
+  });
+
+  test('atualiza cliente, endereço e piscina no mesmo lote', async () => {
+    const { firebase, firestore } = carregarFirebase();
+    const piscinas = [
+      { id: 'piscina-1', localId: 'local-1' },
+      { id: 'piscina-2', localId: 'local-2' },
+    ];
+    const dados = { cliente: 'Casa nova', endereco: 'Rua Nova, 20', tipoPiscina: 'Vinil', litragem: 14500 };
+
+    await firebase.atualizarClienteEPiscinas('empresa-1', 'cliente-1', piscinas, 'piscina-2', dados);
+
+    const lote = firestore.writeBatch.mock.results[0].value;
+    expect(lote.update).toHaveBeenCalledWith('empresas/empresa-1/clientes/cliente-1', { nome: 'Casa nova' });
+    expect(lote.update).toHaveBeenCalledWith('empresas/empresa-1/locais/local-1', { cliente: 'Casa nova' });
+    expect(lote.update).toHaveBeenCalledWith('empresas/empresa-1/piscinas/piscina-1', { cliente: 'Casa nova' });
+    expect(lote.update).toHaveBeenCalledWith('empresas/empresa-1/locais/local-2', { cliente: 'Casa nova', endereco: 'Rua Nova, 20' });
+    expect(lote.update).toHaveBeenCalledWith('empresas/empresa-1/piscinas/piscina-2', {
+      cliente: 'Casa nova', endereco: 'Rua Nova, 20', tipoPiscina: 'Vinil', litragem: 14500,
+    });
     expect(lote.commit).toHaveBeenCalled();
   });
 

@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { createNavigationContainerRef } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Autenticacao from './components/Autenticacao';
 import NavegacaoInferior from './components/NavegacaoInferior';
+import { ContextoSessao, usarSessao } from './contexts/ContextoSessao';
 import CabecalhoApp from './components/CabecalhoApp';
 import TelaEquipe from './components/TelaEquipe';
 import TelaInicio from './components/TelaInicio';
@@ -18,6 +20,7 @@ import { montarOrientacaoTratamento } from './components/dadosTratamento';
 import { unidadesDaDose } from './services/unidades';
 import { enviarFotoVisita } from './services/fotosVisita';
 import {
+  atualizarClienteEPiscinas,
   atualizarClienteAtivo,
   atualizarProduto,
   atualizarTratamentoPadrao,
@@ -36,21 +39,26 @@ import {
   salvarVisita,
 } from './services/firebase';
 
+const referenciaNavegacao = createNavigationContainerRef();
+
 export default function App(props) {
   return (
     <SafeAreaProvider>
       <Autenticacao>
         {({ usuario, perfil, aoSair, aoAtualizarPerfil }) => (
-          <SafeAreaView style={styles.areaSegura}>
-            <ConteudoApp {...props} usuario={usuario} perfil={perfil} aoSair={aoSair} aoAtualizarPerfil={aoAtualizarPerfil} />
-          </SafeAreaView>
+          <ContextoSessao.Provider value={{ usuario, perfil, aoSair, aoAtualizarPerfil }}>
+            <SafeAreaView style={styles.areaSegura}>
+              <ConteudoApp {...props} />
+            </SafeAreaView>
+          </ContextoSessao.Provider>
         )}
       </Autenticacao>
     </SafeAreaProvider>
   );
 }
 
-function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualizarPerfil }) {
+function ConteudoApp({ visitasIniciais = [] }) {
+  const { usuario, perfil, aoSair, aoAtualizarPerfil } = usarSessao();
   const responsavel = perfil.papel === 'responsavel';
   const abas = responsavel
     ? [
@@ -66,6 +74,8 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
     ];
   const [abaSelecionada, setAbaSelecionada] = useState('inicio');
   const [mostrarFormularioCliente, setMostrarFormularioCliente] = useState(false);
+  const [clienteEditandoId, setClienteEditandoId] = useState(null);
+  const [piscinaEditandoId, setPiscinaEditandoId] = useState(null);
   const [mostrarFormularioVisita, setMostrarFormularioVisita] = useState(false);
   const [retornarParaVisitas, setRetornarParaVisitas] = useState(false);
   const [cliente, setCliente] = useState('');
@@ -89,6 +99,26 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
   const [servico, setServico] = useState('');
   const [orientacao, setOrientacao] = useState('');
   const [produtosAplicados, setProdutosAplicados] = useState([]);
+
+  function irParaAba(aba) {
+    setAbaSelecionada(aba);
+    if (referenciaNavegacao.isReady()) {
+      referenciaNavegacao.navigate('Principal', { screen: aba });
+    }
+  }
+
+  function abrirFormularioVisita() {
+    setMostrarFormularioVisita(true);
+    irParaAba('visitas');
+    if (referenciaNavegacao.isReady()) referenciaNavegacao.navigate('NovoServico');
+  }
+
+  function fecharFormularioVisita() {
+    setMostrarFormularioVisita(false);
+    if (referenciaNavegacao.isReady() && referenciaNavegacao.getCurrentRoute()?.name === 'NovoServico') {
+      referenciaNavegacao.goBack();
+    }
+  }
 
   useEffect(() => {
     if (!perfil.empresaId) return undefined;
@@ -160,27 +190,60 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
       litragem: volume,
     };
 
+    const editar = piscinaEditandoId !== null;
+
     try {
-      const piscina = await salvarPiscina(perfil.empresaId, usuario.uid, dadosPiscina);
-      setPiscinas((lista) => lista.some((item) => item.id === piscina.id) ? lista : [...lista, piscina]);
-      setClientes((lista) => lista.some((item) => item.id === piscina.clienteId)
-        ? lista
-        : [...lista, { id: piscina.clienteId, nome: piscina.cliente, ativo: true }]);
-      setLocalVisitaId(piscina.id);
+      if (editar) {
+        const piscinasCliente = piscinas.filter((item) => item.clienteId === clienteEditandoId);
+        await atualizarClienteEPiscinas(perfil.empresaId, clienteEditandoId, piscinasCliente, piscinaEditandoId, dadosPiscina);
+        setClientes((lista) => lista.map((item) => item.id === clienteEditandoId ? { ...item, nome: dadosPiscina.cliente } : item));
+        setPiscinas((lista) => lista.map((item) => item.clienteId === clienteEditandoId
+          ? {
+            ...item,
+            cliente: dadosPiscina.cliente,
+            ...(item.id === piscinaEditandoId ? {
+              endereco: dadosPiscina.endereco,
+              tipoPiscina: dadosPiscina.tipoPiscina,
+              litragem: dadosPiscina.litragem,
+            } : {}),
+          }
+          : item));
+      } else {
+        const piscina = await salvarPiscina(perfil.empresaId, usuario.uid, dadosPiscina);
+        setPiscinas((lista) => lista.some((item) => item.id === piscina.id) ? lista : [...lista, piscina]);
+        setClientes((lista) => lista.some((item) => item.id === piscina.clienteId)
+          ? lista
+          : [...lista, { id: piscina.clienteId, nome: piscina.cliente, ativo: true }]);
+        setLocalVisitaId(piscina.id);
+      }
+
       setCliente('');
       setEndereco('');
       setTipoPiscina('');
       setLitragem('');
+      setClienteEditandoId(null);
+      setPiscinaEditandoId(null);
       setMostrarFormularioCliente(false);
 
-      if (retornarParaVisitas) {
+      if (retornarParaVisitas && !editar) {
         setRetornarParaVisitas(false);
-        setAbaSelecionada('visitas');
-        setMostrarFormularioVisita(true);
+        abrirFormularioVisita();
       }
     } catch (erro) {
-      Alert.alert('Não foi possível salvar', 'Confira sua conexão e tente salvar o local novamente.');
+      const acao = editar ? 'atualizar os dados do cliente' : 'salvar o local';
+      Alert.alert('Não foi possível salvar', `Confira sua conexão e tente ${acao} novamente.`);
     }
+  }
+
+  function iniciarEdicaoCliente(clienteAtual, piscinaAtual) {
+    setClienteEditandoId(clienteAtual.id);
+    setPiscinaEditandoId(piscinaAtual.id);
+    setCliente(clienteAtual.nome || piscinaAtual.cliente || '');
+    setEndereco(piscinaAtual.endereco || '');
+    setTipoPiscina(piscinaAtual.tipoPiscina || '');
+    setLitragem(piscinaAtual.litragem == null ? '' : String(piscinaAtual.litragem));
+    setRetornarParaVisitas(false);
+    setMostrarFormularioCliente(true);
   }
 
   async function alternarClienteAtivo(clienteId) {
@@ -193,8 +256,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
       setClientes((lista) => lista.map((item) => item.id === clienteId ? { ...item, ativo } : item));
       if (retornarParaVisitas && ativo && piscinas.some((piscina) => piscina.clienteId === clienteId)) {
         setRetornarParaVisitas(false);
-        setAbaSelecionada('visitas');
-        setMostrarFormularioVisita(true);
+        abrirFormularioVisita();
       }
     } catch (_erro) {
       Alert.alert('Não foi possível atualizar', 'Confira sua conexão e tente alterar o status do cliente novamente.');
@@ -259,12 +321,18 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
   function cadastrarClienteAntesDaVisita() {
     setRetornarParaVisitas(true);
     setMostrarFormularioCliente(clientes.length === 0 && piscinas.length === 0);
-    setAbaSelecionada('clientes');
+    irParaAba('clientes');
   }
 
   function cancelarCadastroDeCliente() {
     setMostrarFormularioCliente(false);
     setRetornarParaVisitas(false);
+    setCliente('');
+    setEndereco('');
+    setTipoPiscina('');
+    setLitragem('');
+    setClienteEditandoId(null);
+    setPiscinaEditandoId(null);
   }
 
   function iniciarNovoServico() {
@@ -275,8 +343,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
       return;
     }
 
-    setMostrarFormularioVisita(true);
-    setAbaSelecionada('visitas');
+    abrirFormularioVisita();
   }
 
   async function adicionarVisita() {
@@ -353,7 +420,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
     setOrientacao('');
     setProdutosAplicados([]);
     setTratadorUid('');
-    setMostrarFormularioVisita(false);
+    fecharFormularioVisita();
   }
 
   function selecionarDataVisita(dataSelecionada) {
@@ -704,77 +771,121 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
     }
   }
 
-  const abaAtual = abas.some((aba) => aba.id === abaSelecionada) ? abaSelecionada : 'inicio';
   const clientesAtivos = clientes.filter((item) => item.ativo !== false).length;
   const hoje = formatarData(new Date());
   const agendamentosHoje = visitas.filter((item) => item.data === hoje).length;
   const visitasAtrasadas = visitas.filter((item) => item.status !== 'Executada' && dataEhAnteriorAHoje(item.data)).length;
   const piscinasAtivas = piscinas.filter((piscina) => clientes.find((item) => item.id === piscina.clienteId)?.ativo !== false);
 
-  return (
-    <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <StatusBar style="light" />
-      <CabecalhoApp usuario={usuario} perfil={perfil} aoSair={aoSair} aoAtualizarPerfil={aoAtualizarPerfil} />
+  const propsTelaVisitas = {
+    responsavel,
+    possuiLocalAtivo: piscinasAtivas.length > 0,
+    temClientes: clientes.length > 0 || piscinas.length > 0,
+    responsavelUid: usuario.uid,
+    responsavelNome: perfil.nome || usuario.email,
+    piscinas: piscinasAtivas,
+    tratadores,
+    visitas,
+    localVisitaId,
+    tratadorUid,
+    dataVisita,
+    mostrarCalendario,
+    servico,
+    orientacao,
+    produtosAplicados,
+    onQuantidadeProduto: alterarQuantidadeProduto,
+    onLocal: selecionarLocalVisita,
+    onTratador: setTratadorUid,
+    onAbrirCalendario: () => setMostrarCalendario(true),
+    onSelecionarData: selecionarDataVisita,
+    onFecharCalendario: () => setMostrarCalendario(false),
+    onServico: selecionarServico,
+    onOrientacao: setOrientacao,
+    onAdicionarVisita: adicionarVisita,
+    onAbrirFormulario: abrirFormularioVisita,
+    onCancelarFormulario: fecharFormularioVisita,
+    onCadastrarCliente: cadastrarClienteAntesDaVisita,
+    onAddPhoto: adicionarFoto,
+    onCheckIn: registrarChegada,
+    onRegisterDeparture: registrarSaida,
+    onChangeStatus: alterarStatusVisita,
+    onConfirmConclusion: confirmarConclusaoVisita,
+    onChangeJustificativa: alterarJustificativaVisita,
+    onSalvarPh: salvarMedicaoPh,
+    tokenFotos,
+    fotoEnviando,
+  };
 
+  function renderizarTela(aba) {
+    return (
       <View style={styles.conteudo}>
-        {abaAtual === 'inicio' && (
+        {aba === 'inicio' && (
           <TelaInicio
             nome={perfil.nome || usuario.email}
             empresa={perfil.nomeEmpresa}
+            produtos={produtos}
             responsavel={responsavel}
             clientesAtivos={clientesAtivos}
             agendamentosHoje={agendamentosHoje}
             visitasAtrasadas={visitasAtrasadas}
             funcionarios={tratadores.length}
-            aoAbrirLocais={() => setAbaSelecionada('clientes')}
-            aoAbrirVisitas={() => setAbaSelecionada('visitas')}
-            aoAbrirEquipe={() => setAbaSelecionada('equipe')}
-            aoAdicionarServico={responsavel ? iniciarNovoServico : () => setAbaSelecionada('visitas')}
+            aoAbrirLocais={() => irParaAba('clientes')}
+            aoAbrirVisitas={() => irParaAba('visitas')}
+            aoAbrirEquipe={() => irParaAba('equipe')}
+            aoAdicionarServico={responsavel ? iniciarNovoServico : () => irParaAba('visitas')}
           />
         )}
-        {abaAtual === 'clientes' && responsavel && (
+        {aba === 'clientes' && responsavel && (
           <ScrollArea>
             <TelaLocais
               cliente={cliente} endereco={endereco} tipoPiscina={tipoPiscina} litragem={litragem} piscinas={piscinas} clientes={clientes}
-              mostrarFormulario={mostrarFormularioCliente} onMostrarFormulario={() => setMostrarFormularioCliente(true)} onCancelarFormulario={cancelarCadastroDeCliente}
+              mostrarFormulario={mostrarFormularioCliente} editandoCliente={piscinaEditandoId !== null} onMostrarFormulario={() => setMostrarFormularioCliente(true)} onCancelarFormulario={cancelarCadastroDeCliente}
               onCliente={setCliente} onEndereco={setEndereco} onTipoPiscina={setTipoPiscina} onLitragem={setLitragem} onSalvar={salvarResidencia}
-              produtos={produtos} onAbrirProdutos={() => setAbaSelecionada('produtos')}
+              produtos={produtos} onAbrirProdutos={() => irParaAba('produtos')} onEditarCliente={iniciarEdicaoCliente}
               onAlternarCliente={alternarClienteAtivo} onSalvarTratamento={salvarTratamentoPadrao}
             />
           </ScrollArea>
         )}
-        {abaAtual === 'equipe' && responsavel && (
+        {aba === 'equipe' && responsavel && (
           <ScrollArea>
             <TelaEquipe nome={nomeTratador} email={emailTratador} tratadores={tratadores} visitas={visitas} enviando={enviandoConvite} onNome={setNomeTratador} onEmail={setEmailTratador} onConvidar={enviarConvite} />
           </ScrollArea>
         )}
-        {abaAtual === 'produtos' && responsavel && (
+        {aba === 'produtos' && responsavel && (
           <ScrollArea>
             <TelaProdutos produtos={produtos} onSalvar={salvarProdutoNoEstoque} />
           </ScrollArea>
         )}
-        {abaAtual === 'visitas' && (
-          <TelaVisitas
-            responsavel={responsavel} possuiLocalAtivo={piscinasAtivas.length > 0} temClientes={clientes.length > 0 || piscinas.length > 0}
-            responsavelUid={usuario.uid} responsavelNome={perfil.nome || usuario.email}
-            piscinas={piscinasAtivas} tratadores={tratadores} visitas={visitas}
-            localVisitaId={localVisitaId} tratadorUid={tratadorUid} dataVisita={dataVisita} mostrarCalendario={mostrarCalendario}
-            mostrarFormulario={mostrarFormularioVisita}
-            servico={servico} orientacao={orientacao} produtosAplicados={produtosAplicados}
-            onQuantidadeProduto={alterarQuantidadeProduto} onLocal={selecionarLocalVisita} onTratador={setTratadorUid}
-            onAbrirCalendario={() => setMostrarCalendario(true)} onSelecionarData={selecionarDataVisita}
-            onFecharCalendario={() => setMostrarCalendario(false)} onServico={selecionarServico} onOrientacao={setOrientacao}
-            onAdicionarVisita={adicionarVisita} onAddPhoto={adicionarFoto} onCheckIn={registrarChegada}
-            tokenFotos={tokenFotos} fotoEnviando={fotoEnviando}
-            onAbrirFormulario={() => setMostrarFormularioVisita(true)} onCancelarFormulario={() => setMostrarFormularioVisita(false)}
-            onCadastrarCliente={cadastrarClienteAntesDaVisita}
-            onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita}
-            onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} onSalvarPh={salvarMedicaoPh}
-          />
+        {aba === 'visitas' && (
+          <TelaVisitas {...propsTelaVisitas} mostrarFormulario={false} />
         )}
       </View>
+    );
+  }
 
-      <NavegacaoInferior abas={abas} abaAtual={abaAtual} aoSelecionar={setAbaSelecionada} />
+  function renderizarFormularioVisita() {
+    return (
+      <View style={styles.conteudo}>
+        <ScrollArea>
+          <TelaVisitas {...propsTelaVisitas} mostrarFormulario={mostrarFormularioVisita} somenteFormulario />
+        </ScrollArea>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView style={styles.teclado} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <StatusBar style="light" />
+      <CabecalhoApp usuario={usuario} perfil={perfil} aoSair={aoSair} aoAtualizarPerfil={aoAtualizarPerfil} />
+      <View style={styles.conteudo}>
+        <NavegacaoInferior
+          abas={abas}
+          referenciaNavegacao={referenciaNavegacao}
+          aoSelecionar={setAbaSelecionada}
+          renderizarTela={renderizarTela}
+          renderizarFormularioVisita={responsavel ? renderizarFormularioVisita : null}
+        />
+      </View>
     </KeyboardAvoidingView>
   );
 }

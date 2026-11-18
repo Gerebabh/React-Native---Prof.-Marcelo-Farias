@@ -162,8 +162,12 @@ export default function Autenticacao({ children }) {
   if (estado === 'carregando' || estado === 'carregando-perfil') {
     return (
       <SafeAreaView style={styles.areaCarregando}>
-        <ActivityIndicator size="large" color={cores.azulPiscina} />
-        <Text style={styles.textoCarregando}>Conferindo acesso...</Text>
+        <ImageBackground source={require('../assets/login-poolday-fundo.jpg')} resizeMode="cover" style={styles.fundoCarregando}>
+          <View style={styles.sobreposicaoCarregando} />
+          <Image source={require('../assets/logo-poolday.png')} accessibilityLabel="Logo Pool Day" resizeMode="contain" style={styles.logoAbertura} />
+          <ActivityIndicator size="large" color={cores.branco} />
+          <Text style={styles.textoCarregando}>Conferindo acesso...</Text>
+        </ImageBackground>
       </SafeAreaView>
     );
   }
@@ -366,8 +370,11 @@ function TelaLogin({ erro, firebaseAtivo, carregando, carregandoCadastro, onEntr
 }
 
 const styles = StyleSheet.create({
-  areaCarregando: { alignItems: 'center', backgroundColor: cores.fundoTela, flex: 1, justifyContent: 'center' },
-  textoCarregando: { color: cores.azulEscuro, fontSize: 15, marginTop: 12 },
+  areaCarregando: { backgroundColor: cores.azulPiscina, flex: 1 },
+  fundoCarregando: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 24 },
+  sobreposicaoCarregando: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 45, 70, 0.22)' },
+  logoAbertura: { height: 250, marginBottom: 22, maxWidth: 340, width: '90%' },
+  textoCarregando: { color: cores.branco, fontSize: 15, fontWeight: '600', marginTop: 12, textShadowColor: 'rgba(0, 35, 55, 0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   areaLogin: { backgroundColor: cores.azulEscuro, flex: 1 },
   fundo: { flex: 1, justifyContent: 'center' },
   sobreposicao: { ...StyleSheet.absoluteFillObject, backgroundColor: cores.sobreposicaoLogin },
