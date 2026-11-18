@@ -5,7 +5,7 @@ import { cores } from '../styles/colors';
 import VisitasLista from './VisitasLista';
 
 export default function TelaVisitas({
-  responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao, produtosAplicados = [], onQuantidadeProduto,
+  responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, somenteFormulario = false, servico, orientacao, produtosAplicados = [], onQuantidadeProduto,
   onLocal, onTratador, onAbrirCalendario, onSelecionarData, onFecharCalendario, onServico, onOrientacao, onAdicionarVisita,
   onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh,
   tokenFotos, fotoEnviando,
@@ -13,8 +13,8 @@ export default function TelaVisitas({
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.secaoVisitas}>
-        <Text style={styles.tituloSecao}>{responsavel ? 'Próximas visitas' : 'Minhas visitas'}</Text>
-        {responsavel && !possuiLocalAtivo && (
+        {!somenteFormulario && <Text style={styles.tituloSecao}>{responsavel ? 'Próximas visitas' : 'Minhas visitas'}</Text>}
+        {!somenteFormulario && responsavel && !possuiLocalAtivo && (
           <View style={styles.avisoPreRequisito}>
             <Text style={styles.textoAviso}>{temClientes ? 'Não há cliente ativo para agendar. Ative um cliente existente ou cadastre um novo.' : 'Cadastre um cliente e uma piscina antes de agendar um serviço.'}</Text>
             <Pressable accessibilityRole="button" onPress={onCadastrarCliente} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]}>
@@ -22,7 +22,7 @@ export default function TelaVisitas({
             </Pressable>
           </View>
         )}
-        {responsavel && possuiLocalAtivo && !mostrarFormulario && (
+        {!somenteFormulario && responsavel && possuiLocalAtivo && !mostrarFormulario && (
           <Pressable accessibilityRole="button" onPress={onAbrirFormulario} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
             <Text style={styles.textoBotao}>Adicionar serviço</Text>
           </Pressable>
@@ -89,7 +89,7 @@ export default function TelaVisitas({
             </Pressable>
           </>
         )}
-        <VisitasLista
+        {!somenteFormulario && <VisitasLista
           visitas={visitas}
           tokenFotos={tokenFotos}
           fotoEnviando={fotoEnviando}
@@ -100,7 +100,7 @@ export default function TelaVisitas({
           onConfirmConclusion={onConfirmConclusion}
           onChangeJustificativa={onChangeJustificativa}
           onSalvarPh={onSalvarPh}
-        />
+        />}
       </View>
     </ScrollView>
   );

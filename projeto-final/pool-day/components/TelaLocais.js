@@ -4,7 +4,7 @@ import { Picker } from '@react-native-picker/picker';
 import { cores } from '../styles/colors';
 import PadraoTratamento from './PadraoTratamento';
 
-export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, piscinas, clientes, produtos, mostrarFormulario, onMostrarFormulario, onCancelarFormulario, onCliente, onEndereco, onTipoPiscina, onLitragem, onSalvar, onAlternarCliente, onSalvarTratamento, onAbrirProdutos }) {
+export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, piscinas, clientes, produtos, mostrarFormulario, editandoCliente, onMostrarFormulario, onCancelarFormulario, onCliente, onEndereco, onTipoPiscina, onLitragem, onSalvar, onAlternarCliente, onSalvarTratamento, onAbrirProdutos, onEditarCliente }) {
   const [busca, setBusca] = useState('');
   const termoBusca = busca.trim().toLocaleLowerCase('pt-BR');
   const clientesFiltrados = clientes.filter((item) => {
@@ -23,12 +23,12 @@ export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, p
       <Text style={styles.tituloSecao}>Clientes</Text>
       {mostrarFormulario ? (
         <View style={styles.formulario}>
-          <Text style={styles.tituloFormulario}>Novo cliente e piscina</Text>
+          <Text style={styles.tituloFormulario}>{editandoCliente ? 'Editar cliente e piscina' : 'Novo cliente e piscina'}</Text>
           <TextInput accessibilityLabel="Cliente" style={styles.campo} placeholder="Cliente" value={cliente} onChangeText={onCliente} />
           <TextInput accessibilityLabel="Endereço" style={styles.campo} placeholder="Endereço" value={endereco} onChangeText={onEndereco} />
           <Text style={styles.rotulo}>Tipo de piscina</Text>
           <View style={styles.seletor}>
-            <Picker selectedValue={tipoPiscina} onValueChange={onTipoPiscina}>
+            <Picker accessibilityLabel="Tipo de piscina" selectedValue={tipoPiscina} onValueChange={onTipoPiscina}>
               <Picker.Item label="Selecione o tipo" value="" />
               <Picker.Item label="Fibra" value="Fibra" />
               <Picker.Item label="Vinil" value="Vinil" />
@@ -38,7 +38,7 @@ export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, p
           </View>
           <TextInput accessibilityLabel="Litragem em litros (ex.: 13000)" style={styles.campo} placeholder="Litragem em litros (ex.: 13000)" keyboardType="numeric" value={litragem} onChangeText={onLitragem} />
           <Pressable accessibilityRole="button" onPress={onSalvar} style={({ pressed }) => [styles.botao, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
-            <Text style={styles.textoBotao}>Salvar cliente</Text>
+            <Text style={styles.textoBotao}>{editandoCliente ? 'Salvar alterações' : 'Salvar cliente'}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={onCancelarFormulario} style={styles.botaoCancelar}>
             <Text style={styles.textoCancelar}>Cancelar</Text>
@@ -72,6 +72,15 @@ export default function TelaLocais({ cliente, endereco, tipoPiscina, litragem, p
             </Pressable>
             {piscinasCliente.map((piscina) => (
               <View key={piscina.id} style={styles.dadosPiscina}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={'Editar dados do cliente: ' + item.nome}
+                  onPress={() => onEditarCliente(item, piscina)}
+                  android_ripple={{ color: cores.azulClaro }}
+                  style={({ pressed }) => [styles.botaoEditarCliente, pressed && styles.pressionado]}
+                >
+                  <Text style={styles.textoBotaoEditarCliente}>Editar dados do cliente</Text>
+                </Pressable>
                 <Text style={styles.tituloResidencia}>Residência cadastrada</Text>
                 <Text style={styles.dadoResidencia}>Endereço: {piscina.endereco}</Text>
                 <Text style={styles.dadoResidencia}>Piscina de {piscina.tipoPiscina} • {piscina.litragem} L</Text>
@@ -119,6 +128,8 @@ const styles = StyleSheet.create({
   dadosPiscina: { borderTopColor: cores.borda, borderTopWidth: 1, marginTop: 8, paddingTop: 4 },
   botaoStatus: { alignSelf: 'flex-start', borderColor: cores.borda, borderRadius: 7, borderWidth: 1, marginTop: 8, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 8 },
   textoBotaoStatus: { color: cores.azulEscuro, fontSize: 14, fontWeight: '600' },
+  botaoEditarCliente: { alignSelf: 'flex-start', borderColor: cores.borda, borderRadius: 7, borderWidth: 1, marginTop: 8, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 8 },
+  textoBotaoEditarCliente: { color: cores.azulEscuro, fontSize: 14, fontWeight: '600' },
   pressionado: { opacity: 0.75 },
   vazio: { color: cores.textoSecundario, fontSize: 15, marginTop: 12 },
 });

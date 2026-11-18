@@ -2,21 +2,25 @@
   "expo": {
     "name": "Pool Day",
     "slug": "pool-day",
+    "owner": "gerebas-team",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo-poolday.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.solutionforge.poolday",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+        "backgroundColor": "#12B8D2",
+        "foregroundImage": "./assets/logo-poolday.png"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -36,7 +40,22 @@
           "cameraPermission": "O Pool Day usa a câmera para registrar fotos antes e depois do atendimento.",
           "microphonePermission": false
         }
+      ],
+      "expo-font",
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#12B8D2",
+          "image": "./assets/logo-poolday.png",
+          "imageWidth": 200
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2d785a0d-613b-4367-8bb7-ce4a9882c316"
+      }
+    }
   }
 }

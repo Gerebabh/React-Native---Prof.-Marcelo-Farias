@@ -317,6 +317,38 @@ export async function atualizarClienteAtivo(empresaId, clienteId, ativo) {
   await updateDoc(doc(banco, 'empresas', empresaId, 'clientes', clienteId), { ativo });
 }
 
+export async function atualizarClienteEPiscinas(empresaId, clienteId, piscinasCliente, piscinaEditadaId, dados) {
+  verificarConfiguracao();
+  if (!piscinasCliente.some((piscina) => piscina.id === piscinaEditadaId)) {
+    throw new Error('A piscina que está sendo editada não foi encontrada.');
+  }
+
+  const lote = writeBatch(banco);
+  lote.update(doc(banco, 'empresas', empresaId, 'clientes', clienteId), { nome: dados.cliente });
+
+  piscinasCliente.forEach((piscina) => {
+    const editada = piscina.id === piscinaEditadaId;
+    const dadosPiscina = { cliente: dados.cliente };
+    const dadosLocal = { cliente: dados.cliente };
+
+    if (editada) {
+      Object.assign(dadosPiscina, {
+        endereco: dados.endereco,
+        tipoPiscina: dados.tipoPiscina,
+        litragem: dados.litragem,
+      });
+      dadosLocal.endereco = dados.endereco;
+    }
+
+    lote.update(doc(banco, 'empresas', empresaId, 'piscinas', piscina.id), dadosPiscina);
+    if (piscina.localId) {
+      lote.update(doc(banco, 'empresas', empresaId, 'locais', piscina.localId), dadosLocal);
+    }
+  });
+
+  await lote.commit();
+}
+
 export async function atualizarTratamentoPadrao(empresaId, piscinaId, dados) {
   verificarConfiguracao();
   await updateDoc(doc(banco, 'empresas', empresaId, 'piscinas', piscinaId), dados);

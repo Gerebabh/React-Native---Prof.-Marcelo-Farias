@@ -7,12 +7,37 @@ import { normalizarPh } from '../services/calculadoraProdutos';
 const statusDisponiveis = ['Executada', 'Frustrada', 'Não realizada'];
 
 export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh = async () => false }) {
-  if (visitas.length === 0) {
+  const [visitaAbertaId, setVisitaAbertaId] = useState(null);
+  const visitasOrdenadas = ordenarVisitasPorData(visitas || [], 'desc');
+
+  if (visitasOrdenadas.length === 0) {
     return <Text style={styles.vazio}>Nenhuma visita programada.</Text>;
   }
 
-  const visitasEmAberto = visitas.filter((item) => item.status !== 'Executada');
-  const visitasConcluidas = visitas.filter((item) => item.status === 'Executada');
+  const visitasEmAberto = ordenarVisitasPorData(
+    visitasOrdenadas.filter((item) => item.status !== 'Executada'),
+    'asc'
+  );
+  const visitasConcluidas = visitasOrdenadas.filter((item) => item.status === 'Executada');
+
+  function renderizarVisita(item) {
+    return (
+      <VisitaCartao
+        item={item}
+        expandida={visitaAbertaId === item.id}
+        onAlternar={() => setVisitaAbertaId((atual) => atual === item.id ? null : item.id)}
+        tokenFotos={tokenFotos}
+        fotoEnviando={fotoEnviando}
+        onAddPhoto={onAddPhoto}
+        onCheckIn={onCheckIn}
+        onRegisterDeparture={onRegisterDeparture}
+        onChangeStatus={onChangeStatus}
+        onConfirmConclusion={onConfirmConclusion}
+        onChangeJustificativa={onChangeJustificativa}
+        onSalvarPh={onSalvarPh}
+      />
+    );
+  }
 
   return (
     <View>
@@ -23,7 +48,7 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
           data={visitasEmAberto}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
-          renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} onSalvarPh={onSalvarPh} />}
+          renderItem={({ item }) => renderizarVisita(item)}
         />
       )}
       {visitasConcluidas.length > 0 && (
@@ -33,7 +58,7 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
             data={visitasConcluidas}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} onSalvarPh={onSalvarPh} />}
+            renderItem={({ item }) => renderizarVisita(item)}
           />
         </>
       )}
@@ -41,7 +66,26 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
   );
 }
 
-function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh }) {
+function ordenarVisitasPorData(visitas, ordem = 'desc') {
+  return [...visitas].sort((a, b) => {
+    const dataA = converterDataParaOrdenacao(a.data);
+    const dataB = converterDataParaOrdenacao(b.data);
+    if (dataA === null && dataB !== null) return 1;
+    if (dataB === null && dataA !== null) return -1;
+    return ordem === 'asc' ? (dataA || 0) - (dataB || 0) : (dataB || 0) - (dataA || 0);
+  });
+}
+
+function converterDataParaOrdenacao(valor) {
+  const partes = String(valor || '').split('/').map(Number);
+  if (partes.length !== 3 || partes.some((parte) => !parte)) return null;
+  const [dia, mes, ano] = partes;
+  const data = new Date(ano, mes - 1, dia);
+  if (data.getDate() !== dia || data.getMonth() !== mes - 1 || data.getFullYear() !== ano) return null;
+  return data.getTime();
+}
+
+function VisitaCartao({ item, expandida, onAlternar, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh }) {
   const [motivo, setMotivo] = useState(item.justificativa || '');
   const [motivoSalvo, setMotivoSalvo] = useState(Boolean(item.justificativa));
   const [phTexto, setPhTexto] = useState(item.phMedido == null ? '' : String(item.phMedido).replace('.', ','));
@@ -76,10 +120,27 @@ function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, o
 
   return (
     <View style={styles.cartao}>
-      <Text style={styles.data}>{item.data}</Text>
-      <Text style={styles.orientacao}>{item.local}</Text>
-      <Text style={styles.servico}>{item.servico}</Text>
-      {item.tratadorNome ? <Text style={styles.tratador}>Tratador: {item.tratadorNome}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${expandida ? 'Recolher' : 'Expandir'} visita: ${item.local}, ${item.data}`}
+        accessibilityState={{ expanded: expandida }}
+        onPress={onAlternar}
+        android_ripple={{ color: cores.azulClaro }}
+        style={styles.cabecalhoVisita}
+      >
+        <View style={styles.resumoVisita}>
+          <Text style={styles.servico}>{item.servico || 'Visita'}</Text>
+          <Text style={styles.localResumo} numberOfLines={1}>{item.local}</Text>
+          <View style={styles.linhaResumo}>
+            <Text style={styles.data}>{item.data}</Text>
+            <Text style={styles.statusResumo}>{item.status || 'Pendente'}</Text>
+          </View>
+          {item.tratadorNome ? <Text style={styles.tratador}>Tratador: {item.tratadorNome}</Text> : null}
+        </View>
+        <Text style={styles.indicadorExpandir}>{expandida ? '−' : '+'}</Text>
+      </Pressable>
+      {expandida && (
+        <View style={styles.detalhesVisita}>
       {item.orientacao ? <Text style={styles.orientacao}>{item.orientacao}</Text> : null}
       {(item.horarioChegada || item.phMedido != null) && (
         <View style={styles.secaoPh}>
@@ -210,6 +271,8 @@ function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, o
           ))}
         </View>
       )}
+        </View>
+      )}
     </View>
   );
 }
@@ -321,9 +384,16 @@ function formatarPh(valor) {
 
 const styles = StyleSheet.create({
   vazio: { color: cores.textoSecundario, fontSize: 15, marginTop: 8 },
-  cartao: { backgroundColor: cores.branco, borderRadius: 10, marginTop: 10, padding: 16 },
-  data: { color: cores.textoSecundario, fontSize: 14 },
-  servico: { color: cores.azulEscuro, fontSize: 17, fontWeight: '600', marginTop: 4 },
+  cartao: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 10, borderWidth: 1, marginTop: 10, overflow: 'hidden' },
+  cabecalhoVisita: { alignItems: 'center', flexDirection: 'row', minHeight: 82, paddingHorizontal: 14, paddingVertical: 12 },
+  resumoVisita: { flex: 1, minWidth: 0 },
+  localResumo: { color: cores.texto, fontSize: 14, marginTop: 3 },
+  linhaResumo: { alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 5 },
+  data: { color: cores.textoSecundario, fontSize: 13 },
+  statusResumo: { color: cores.azulEscuro, fontSize: 12, fontWeight: '600' },
+  indicadorExpandir: { color: cores.azulPiscina, fontSize: 26, fontWeight: '400', marginLeft: 10, paddingHorizontal: 4 },
+  detalhesVisita: { borderTopColor: cores.borda, borderTopWidth: 1, padding: 14 },
+  servico: { color: cores.azulEscuro, fontSize: 16, fontWeight: '700' },
   tratador: { color: cores.textoSecundario, fontSize: 14, marginTop: 5 },
   orientacao: { color: cores.textoSecundario, fontSize: 15, marginTop: 6 },
   secaoPh: { backgroundColor: cores.fundoTela, borderRadius: 8, marginTop: 12, padding: 12 },
