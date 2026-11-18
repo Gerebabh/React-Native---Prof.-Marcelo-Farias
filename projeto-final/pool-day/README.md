@@ -59,7 +59,7 @@ Adicionar aqui capturas reais do aplicativo no dispositivo: painel, clientes, ag
 
 ## Integrante e divisão do trabalho
 
-- Geraldo Lucio Santos — projeto individual: definição da proposta, desenvolvimento das telas e funcionalidades, integração com Firebase, testes e documentação.
+- Geraldo Lucio Carvalho dos Santos — matrícula 2424290069. Projeto individual: definição da proposta, desenvolvimento das telas e funcionalidades, integração com Firebase, testes e documentação.
 
 ## Documentação
 
