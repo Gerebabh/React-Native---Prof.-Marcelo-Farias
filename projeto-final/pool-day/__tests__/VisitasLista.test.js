@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import VisitasLista from '../components/VisitasLista';
 
 jest.mock('../services/fotosVisita', () => ({
@@ -25,6 +25,22 @@ test('mostra data, serviço e orientação de produto das visitas', async () => 
   expect(getByText('Cliente — Endereço')).toBeTruthy();
   expect(getByText('Aspiração')).toBeTruthy();
   expect(getByText('Aplicar cloro conforme medição.')).toBeTruthy();
+});
+
+test('registra o pH informado na visita', async () => {
+  const onSalvarPh = jest.fn(async () => true);
+  const tela = await render(<VisitasLista
+    visitas={[{ id: 'visita-ph', data: '18/11/2026', local: 'Casa', servico: 'Aplicar produtos', horarioChegada: '2026-11-18T12:00:00.000Z', enderecoChegada: 'Brasília' }]}
+    onSalvarPh={onSalvarPh}
+  />);
+
+  await fireEvent.changeText(tela.getByLabelText('pH medido na visita'), '7,2');
+  await act(async () => {
+    await fireEvent.press(tela.getByRole('button', { name: 'Registrar pH' }));
+  });
+
+  await waitFor(() => expect(onSalvarPh).toHaveBeenCalledWith('visita-ph', 7.2));
+  expect(tela.getByText('Medição registrada: pH 7,2.')).toBeTruthy();
 });
 
 test('mostra o custo dos produtos na visita concluída', async () => {

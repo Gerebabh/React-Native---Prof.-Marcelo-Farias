@@ -54,6 +54,20 @@ jest.mock('../components/Autenticacao', () => {
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(),
+  requestMediaLibraryPermissionsAsync: jest.fn(),
+}), { virtual: true });
+
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(async () => null),
+  setItem: jest.fn(async () => {}),
+  removeItem: jest.fn(async () => {}),
+}), { virtual: true });
+
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///documents/',
+  copyAsync: jest.fn(async () => {}),
+  deleteAsync: jest.fn(async () => {}),
 }), { virtual: true });
 
 jest.mock('expo-file-system', () => ({
@@ -520,6 +534,12 @@ describe('cadastro de cliente e visitas', () => {
     expect(tela.getByText('Piscina de Fibra • 13000 L')).toBeTruthy();
     expect(tela.getByText('Status: Ativo')).toBeTruthy();
     expect(tela.getByRole('button', { name: 'Desativar cliente: Casa da família' })).toBeTruthy();
+  });
+
+  test('deixa a calculadora de choque disponível na aba Produtos', async () => {
+    const tela = await renderNaAba(<App />, 'Produtos');
+
+    expect(tela.getByText('Calculadora de tratamento de choque')).toBeTruthy();
   });
 
   test('responsável configura as quantidades do tratamento normal da piscina', async () => {
