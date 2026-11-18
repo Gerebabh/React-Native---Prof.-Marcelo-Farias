@@ -13,6 +13,7 @@ import TelaInicio from './components/TelaInicio';
 import TelaLocais from './components/TelaLocais';
 import TelaProdutos from './components/TelaProdutos';
 import TelaVisitas from './components/TelaVisitas';
+import { normalizarPh } from './services/calculadoraProdutos';
 import { montarOrientacaoTratamento } from './components/dadosTratamento';
 import { unidadesDaDose } from './services/unidades';
 import { enviarFotoVisita } from './services/fotosVisita';
@@ -389,9 +390,20 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
     try {
       await atualizarVisita(perfil.empresaId, id, dados);
       setVisitas((listaAtual) => listaAtual.map((visita) => visita.id === id ? { ...visita, ...dados } : visita));
+      return true;
     } catch (erro) {
       Alert.alert('Não foi possível atualizar', 'Confira sua conexão e tente novamente.');
+      return false;
     }
+  }
+
+  async function salvarMedicaoPh(id, textoPh) {
+    const phMedido = normalizarPh(textoPh);
+    if (phMedido === null) {
+      Alert.alert('Medição inválida', 'Informe um pH entre 0 e 14.');
+      return false;
+    }
+    return atualizarDadosVisita(id, { phMedido, phMedidoEm: new Date().toISOString() });
   }
 
   function alterarStatusVisita(id, status) {
@@ -757,7 +769,7 @@ function ConteudoApp({ visitasIniciais = [], usuario, perfil, aoSair, aoAtualiza
             onAbrirFormulario={() => setMostrarFormularioVisita(true)} onCancelarFormulario={() => setMostrarFormularioVisita(false)}
             onCadastrarCliente={cadastrarClienteAntesDaVisita}
             onRegisterDeparture={registrarSaida} onChangeStatus={alterarStatusVisita}
-            onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita}
+            onConfirmConclusion={confirmarConclusaoVisita} onChangeJustificativa={alterarJustificativaVisita} onSalvarPh={salvarMedicaoPh}
           />
         )}
       </View>

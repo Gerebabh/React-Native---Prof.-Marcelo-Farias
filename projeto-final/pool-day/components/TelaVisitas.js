@@ -7,7 +7,7 @@ import VisitasLista from './VisitasLista';
 export default function TelaVisitas({
   responsavel, possuiLocalAtivo, temClientes, responsavelUid, responsavelNome, piscinas, tratadores, visitas, localVisitaId, tratadorUid, dataVisita, mostrarCalendario, mostrarFormulario, servico, orientacao, produtosAplicados = [], onQuantidadeProduto,
   onLocal, onTratador, onAbrirCalendario, onSelecionarData, onFecharCalendario, onServico, onOrientacao, onAdicionarVisita,
-  onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa,
+  onAbrirFormulario, onCancelarFormulario, onCadastrarCliente, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh,
   tokenFotos, fotoEnviando,
 }) {
   return (
@@ -99,6 +99,7 @@ export default function TelaVisitas({
           onChangeStatus={onChangeStatus}
           onConfirmConclusion={onConfirmConclusion}
           onChangeJustificativa={onChangeJustificativa}
+          onSalvarPh={onSalvarPh}
         />
       </View>
     </ScrollView>

@@ -270,9 +270,16 @@ service cloud.firestore {
               'status', 'justificativa', 'horarioChegada', 'latitude',
               'longitude', 'enderecoChegada', 'horarioSaida',
               'latitudeSaida', 'longitudeSaida', 'enderecoSaida',
+              'phMedido', 'phMedidoEm',
               'estoqueBaixado', 'estoqueBaixadoEm',
               'custosProdutos', 'custoTotalProdutos'
             ])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['phMedido', 'phMedidoEm'])
+              || (resource.data.status != 'Executada'
+                && request.resource.data.phMedido is number
+                && request.resource.data.phMedido >= 0
+                && request.resource.data.phMedido <= 14
+                && request.resource.data.phMedidoEm is string))
             && (request.resource.data.status != 'Executada'
               || (resource.data.servico != 'Aplicar produtos'
                 || (request.resource.data.estoqueBaixado == true

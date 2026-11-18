@@ -312,6 +312,14 @@ describe('regras de acesso por empresa e papel', () => {
     await assertFails(getDoc(doc(banco, caminhoEmpresa(empresaA, 'clientes', 'cliente-a'))));
   });
 
+  test('tratador registra pH válido na própria visita e não grava valor fora da faixa', async () => {
+    const banco = firestoreDo(usuarioTratadorA);
+    const visita = doc(banco, caminhoEmpresa(empresaA, 'visitas', 'visita-tratador-a'));
+
+    await assertSucceeds(updateDoc(visita, { phMedido: 7.2, phMedidoEm: '2026-11-18T12:00:00.000Z' }));
+    await assertFails(updateDoc(visita, { phMedido: 15, phMedidoEm: '2026-11-18T12:01:00.000Z' }));
+  });
+
   test('responsável ativo cria perfil e vínculo de tratador no mesmo lote', async () => {
     const banco = firestoreDo(usuarioResponsavelA);
     const novoUsuario = 'tratador-novo';

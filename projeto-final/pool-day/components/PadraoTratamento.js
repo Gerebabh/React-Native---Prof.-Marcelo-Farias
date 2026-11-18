@@ -111,8 +111,8 @@ export default function PadraoTratamento({ piscina, produtos, onSalvar, onAbrirP
             onChangeText={setObservacoes}
             multiline
           />
-          {produtos.length > 0 && <Pressable accessibilityRole="button" onPress={salvar} style={({ pressed }) => [styles.botaoSalvar, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
-            <Text style={styles.textoBotao}>Salvar padrão</Text>
+          {produtos.length > 0 && <Pressable accessibilityRole="button" onPress={salvar} style={({ pressed }) => [styles.botaoSalvar, pressed && styles.pressionado]}>
+            <Text style={styles.textoBotaoSalvar}>Salvar padrão</Text>
           </Pressable>}
           <Pressable accessibilityRole="button" onPress={cancelarEdicao} style={styles.botaoCancelar}>
             <Text style={styles.textoCancelar}>Cancelar</Text>
@@ -159,11 +159,11 @@ const styles = StyleSheet.create({
   unidade: { color: cores.textoSecundario, fontSize: 13 },
   camposProduto: { flexDirection: 'row', gap: 8 },
   campo: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, flex: 1, fontSize: 14, paddingHorizontal: 10, paddingVertical: 9 },
-  seletorUnidade: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, minWidth: 90 },
-  campoUnidade: { height: 44 },
+  seletorUnidade: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, justifyContent: 'center', minWidth: 108 },
+  campoUnidade: { color: cores.texto, fontSize: 14, height: 52, paddingVertical: 0, width: 108 },
   campoObservacoes: { marginTop: 12, minHeight: 60, textAlignVertical: 'top' },
-  botaoSalvar: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 7, marginTop: 12, overflow: 'hidden', padding: 11 },
-  textoBotao: { color: cores.branco, fontSize: 14, fontWeight: '600' },
+  botaoSalvar: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 7, justifyContent: 'center', marginTop: 12, minHeight: 50, paddingHorizontal: 14, paddingVertical: 12 },
+  textoBotaoSalvar: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   botaoCancelar: { alignItems: 'center', marginTop: 8, padding: 8 },
   textoCancelar: { color: cores.textoSecundario, fontSize: 14, fontWeight: '600' },
   botaoEditar: { alignSelf: 'flex-start', borderColor: cores.borda, borderRadius: 7, borderWidth: 1, marginTop: 10, overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 8 },

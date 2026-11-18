@@ -2,10 +2,11 @@ import { cores } from '../styles/colors';
 import { Alert, FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { baixarFotoVisita } from '../services/fotosVisita';
+import { normalizarPh } from '../services/calculadoraProdutos';
 
 const statusDisponiveis = ['Executada', 'Frustrada', 'Não realizada'];
 
-export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh = async () => false }) {
   if (visitas.length === 0) {
     return <Text style={styles.vazio}>Nenhuma visita programada.</Text>;
   }
@@ -22,7 +23,7 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
           data={visitasEmAberto}
           keyExtractor={(item) => item.id}
           scrollEnabled={false}
-          renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+          renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} onSalvarPh={onSalvarPh} />}
         />
       )}
       {visitasConcluidas.length > 0 && (
@@ -32,7 +33,7 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
             data={visitasConcluidas}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} />}
+            renderItem={({ item }) => <VisitaCartao item={item} tokenFotos={tokenFotos} fotoEnviando={fotoEnviando} onAddPhoto={onAddPhoto} onCheckIn={onCheckIn} onRegisterDeparture={onRegisterDeparture} onChangeStatus={onChangeStatus} onConfirmConclusion={onConfirmConclusion} onChangeJustificativa={onChangeJustificativa} onSalvarPh={onSalvarPh} />}
           />
         </>
       )}
@@ -40,11 +41,18 @@ export default function VisitasLista({ visitas, tokenFotos, fotoEnviando, onAddP
   );
 }
 
-function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa }) {
+function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, onRegisterDeparture, onChangeStatus, onConfirmConclusion, onChangeJustificativa, onSalvarPh }) {
   const [motivo, setMotivo] = useState(item.justificativa || '');
   const [motivoSalvo, setMotivoSalvo] = useState(Boolean(item.justificativa));
+  const [phTexto, setPhTexto] = useState(item.phMedido == null ? '' : String(item.phMedido).replace('.', ','));
+  const [phSalvo, setPhSalvo] = useState(item.phMedido != null);
   const statusAtual = item.status || 'Pendente';
   const precisaJustificativa = statusAtual === 'Frustrada' || statusAtual === 'Não realizada';
+
+  useEffect(() => {
+    setPhTexto(item.phMedido == null ? '' : String(item.phMedido).replace('.', ','));
+    setPhSalvo(item.phMedido != null);
+  }, [item.phMedido]);
 
   function salvarJustificativa() {
     if (!motivo.trim()) {
@@ -56,6 +64,16 @@ function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, o
     setMotivoSalvo(true);
   }
 
+  async function salvarPhMedido() {
+    const ph = normalizarPh(phTexto);
+    if (ph === null) {
+      Alert.alert('Medição inválida', 'Informe um pH entre 0 e 14.');
+      return;
+    }
+    const salvo = await onSalvarPh(item.id, ph);
+    setPhSalvo(salvo);
+  }
+
   return (
     <View style={styles.cartao}>
       <Text style={styles.data}>{item.data}</Text>
@@ -63,6 +81,29 @@ function VisitaCartao({ item, tokenFotos, fotoEnviando, onAddPhoto, onCheckIn, o
       <Text style={styles.servico}>{item.servico}</Text>
       {item.tratadorNome ? <Text style={styles.tratador}>Tratador: {item.tratadorNome}</Text> : null}
       {item.orientacao ? <Text style={styles.orientacao}>{item.orientacao}</Text> : null}
+      {(item.horarioChegada || item.phMedido != null) && (
+        <View style={styles.secaoPh}>
+          <Text style={styles.tituloPh}>Medição de pH</Text>
+          {statusAtual === 'Executada' ? (
+            <Text style={styles.textoPh}>{item.phMedido == null ? 'Sem medição registrada.' : `pH registrado: ${formatarPh(item.phMedido)}`}</Text>
+          ) : (
+            <>
+              <TextInput
+                accessibilityLabel="pH medido na visita"
+                keyboardType="decimal-pad"
+                style={styles.campoPh}
+                placeholder="Informe o pH (0 a 14)"
+                value={phTexto}
+                onChangeText={(valor) => { setPhTexto(valor); setPhSalvo(false); }}
+              />
+              <Pressable accessibilityRole="button" onPress={salvarPhMedido} style={({ pressed }) => [styles.botaoPh, pressed && styles.pressionado]} android_ripple={{ color: cores.azulPiscinaPressionado }}>
+                <Text style={styles.textoBotaoPh}>{phSalvo ? 'Atualizar pH' : 'Registrar pH'}</Text>
+              </Pressable>
+              {phSalvo && <Text style={styles.confirmacao}>Medição registrada: pH {formatarPh(item.phMedido ?? phTexto)}.</Text>}
+            </>
+          )}
+        </View>
+      )}
       {item.horarioChegada ? (
         <>
           <Text style={styles.registroChegada}>Horário de chegada: {new Date(item.horarioChegada).toLocaleString('pt-BR')}</Text>
@@ -274,6 +315,10 @@ function formatarMoeda(valor) {
   return `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
 }
 
+function formatarPh(valor) {
+  return String(valor).replace('.', ',');
+}
+
 const styles = StyleSheet.create({
   vazio: { color: cores.textoSecundario, fontSize: 15, marginTop: 8 },
   cartao: { backgroundColor: cores.branco, borderRadius: 10, marginTop: 10, padding: 16 },
@@ -281,6 +326,12 @@ const styles = StyleSheet.create({
   servico: { color: cores.azulEscuro, fontSize: 17, fontWeight: '600', marginTop: 4 },
   tratador: { color: cores.textoSecundario, fontSize: 14, marginTop: 5 },
   orientacao: { color: cores.textoSecundario, fontSize: 15, marginTop: 6 },
+  secaoPh: { backgroundColor: cores.fundoTela, borderRadius: 8, marginTop: 12, padding: 12 },
+  tituloPh: { color: cores.azulEscuro, fontSize: 15, fontWeight: '700', marginBottom: 5 },
+  textoPh: { color: cores.textoSecundario, fontSize: 14, marginTop: 3 },
+  campoPh: { backgroundColor: cores.branco, borderColor: cores.borda, borderRadius: 7, borderWidth: 1, color: cores.texto, fontSize: 15, marginTop: 4, paddingHorizontal: 10, paddingVertical: 9 },
+  botaoPh: { alignItems: 'center', backgroundColor: cores.azulPiscina, borderRadius: 7, justifyContent: 'center', marginTop: 8, minHeight: 42, overflow: 'hidden', padding: 9 },
+  textoBotaoPh: { color: cores.branco, fontSize: 14, fontWeight: '700' },
   status: { color: cores.texto, fontSize: 15, fontWeight: '600', marginTop: 12 },
   acoesStatus: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   botaoStatus: { borderColor: cores.borda, borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8 },
